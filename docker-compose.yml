@@ -1,0 +1,32 @@
+# Sistema completo de Snippet Searcher.
+# Todos los servicios van en este archivo para compartir una misma red de Docker:
+# así se encuentran entre ellos por nombre de servicio (ej: http://printscript:8080).
+#
+# Todavía no levanta nada. Cada servicio se agrega cuando tenga su imagen disponible.
+
+services: {}
+
+# Plantilla para cada servicio propio (Snippets, Permisos, PrintScript):
+#
+#   <servicio>:
+#     image: ghcr.io/ing-sis-printscript/<servicio>:latest
+#     ports:
+#       - "127.0.0.1:<puerto de la tabla del README>:8080"   # solo desde esta máquina
+#     environment:
+#       SPRING_DATASOURCE_URL: jdbc:postgresql://<servicio>-db:5432/<base>
+#     depends_on:
+#       - <servicio>-db
+#
+#   <servicio>-db:
+#     image: postgres:18
+#     environment:
+#       POSTGRES_DB: <base>
+#       POSTGRES_USER: ${<SERVICIO>_DB_USER:-<base>}
+#       POSTGRES_PASSWORD: ${<SERVICIO>_DB_PASSWORD:-<base>}
+#     volumes:
+#       - <servicio>-db-data:/var/lib/postgresql
+#
+# Y al final del archivo, un volumen por base:
+#
+# volumes:
+#   <servicio>-db-data:
