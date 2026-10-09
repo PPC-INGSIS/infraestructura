@@ -1,0 +1,49 @@
+name: VMs
+
+on:
+  workflow_dispatch:
+    inputs:
+      entorno:
+        description: "Qué VM"
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+      accion:
+        description: "Qué hacer"
+        required: true
+        type: choice
+        options:
+          - encender
+          - apagar
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  RESOURCE_GROUP: rg-snippet-searcher
+  VM: vm-snippet-${{ inputs.entorno }}
+
+jobs:
+  power:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Login a Azure
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Encender
+        if: inputs.accion == 'encender'
+        run: az vm start --resource-group "$RESOURCE_GROUP" --name "$VM"
+
+      - name: Apagar
+        if: inputs.accion == 'apagar'
+        run: az vm deallocate --resource-group "$RESOURCE_GROUP" --name "$VM"
+
+      - name: Estado
+        run: az vm show --show-details --resource-group "$RESOURCE_GROUP" --name "$VM" --query powerState --output tsv
