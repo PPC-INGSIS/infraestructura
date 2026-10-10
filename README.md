@@ -1,12 +1,13 @@
 # Infraestructura
 
-Configuración para levantar **Snippet Searcher** completo: todos los servicios juntos, en una misma red de Docker, para que se puedan hablar entre ellos.
+Configuración para levantar **Snippet Searcher** completo y operar dónde corre: el `docker-compose.yml` con todos los servicios juntos, en una misma red de Docker, y los workflows que manejan las VMs de Azure.
 
 No tiene código ni build. Son archivos de configuración.
 
 ## Estado
 
-Esqueleto. El `docker-compose.yml` todavía no levanta ningún servicio: cada uno se agrega cuando tenga su imagen disponible.
+- `docker-compose.yml`: esqueleto. Todavía no levanta ningún servicio: cada uno se agrega cuando tenga su imagen disponible.
+- Workflow **VMs**: funcionando. Enciende y apaga las VMs de dev y prod (ver [Encender y apagar las VMs](#encender-y-apagar-las-vms)).
 
 ## Por qué un repo aparte
 
@@ -18,11 +19,14 @@ Tiene que ser un solo archivo porque Docker Compose crea **una red por archivo**
 
 | Servicio | Qué es | De quién |
 |---|---|---|
+| UI | La interfaz web: es lo que usa el usuario y le habla a Snippets | La cátedra |
 | Snippets | Puerta de entrada de todo lo que es snippet | Nosotros |
 | Permisos | Quién puede ver o editar qué | Nosotros |
 | PrintScript | Valida, formatea, lintea y ejecuta | Nosotros |
 | Snippet Store | Guarda y lee el código de los snippets | La cátedra |
 | Una base Postgres por servicio propio | Cada servicio es dueño de sus datos | — |
+
+Todavía no se sabe cómo entrega la cátedra la UI (imagen lista o código para construir), así que no tiene puerto asignado. Se define cuando la tengamos.
 
 ## Requisitos
 
@@ -70,3 +74,38 @@ cp .env.example .env
 1. Copiar la plantilla que está comentada en `docker-compose.yml`.
 2. Usar el puerto que le corresponde en la tabla de arriba.
 3. Si necesita variables propias, agregarlas a `.env.example` con un valor por defecto.
+
+## Encender y apagar las VMs
+
+Hay una VM por entorno, en Azure:
+
+| Entorno | VM | Rama que se deploya ahí |
+|---|---|---|
+| dev | `vm-snippet-dev` | `dev` |
+| prod | `vm-snippet-prod` | `main` |
+
+Las VMs cuestan mientras están prendidas, así que **se prenden para trabajar y se apagan al terminar**. Además, se apagan solas todos los días a las 23:00 (hora de Argentina) por si alguien se olvida.
+
+### Cómo
+
+1. Pestaña **Actions** → workflow **VMs** → **Run workflow**.
+2. Elegir la VM (`dev` o `prod`) y la acción (`encender` o `apagar`).
+3. El último paso, **Estado**, muestra cómo quedó: `VM running` o `VM deallocated`.
+
+Puede usarlo cualquiera con permiso de escritura en este repo.
+
+### Cómo se conecta con Azure
+
+El workflow entra a Azure con OIDC: no hay ninguna contraseña de Azure guardada en GitHub.
+
+- En Azure hay una identidad (`gh-snippet-searcher-infra`) que solo acepta workflows que corren desde la rama `main` de este repo.
+- Esa identidad tiene el rol **Colaborador de la máquina virtual** solo sobre el grupo de recursos `rg-snippet-searcher`.
+- Los secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID` y `AZURE_SUBSCRIPTION_ID` son identificadores, no contraseñas. Están como secrets para que no aparezcan en los logs, que en este repo son públicos.
+
+### Si falla
+
+| Error | Causa probable |
+|---|---|
+| `AADSTS700213: No matching federated identity` | La credencial federada no coincide con el repo o la rama. Se corrió desde una rama que no es `main`. |
+| Se queda colgado en `Attempting Azure CLI login` y corta a los 5 minutos | La identidad no tiene el rol correcto sobre el grupo de recursos. Revisar en Azure: IAM → Comprobar acceso. |
+| `AuthorizationFailed` | Mismo caso: falta el rol, o se acaba de asignar y todavía no se propagó (esperar unos minutos). |
