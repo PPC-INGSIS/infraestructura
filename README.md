@@ -6,7 +6,7 @@ No tiene código ni build. Son archivos de configuración.
 
 ## Estado
 
-- `docker-compose.yml`: esqueleto. Todavía no levanta ningún servicio: cada uno se agrega cuando tenga su imagen disponible.
+- `docker-compose.yml`: levanta **Permisos** con su base. Los demás servicios se agregan cuando tengan su imagen disponible.
 - Workflow **VMs**: funcionando. Enciende y apaga las VMs de dev y prod (ver [Encender y apagar las VMs](#encender-y-apagar-las-vms)).
 
 ## Por qué un repo aparte
@@ -28,9 +28,21 @@ Tiene que ser un solo archivo porque Docker Compose crea **una red por archivo**
 
 Todavía no se sabe cómo entrega la cátedra la UI (imagen lista o código para construir), así que no tiene puerto asignado. Se define cuando la tengamos.
 
+
 ## Requisitos
 
 - Docker
+- Haber iniciado sesión en ghcr.io, porque las imágenes de los servicios son privadas: `docker login ghcr.io` con un token que tenga el permiso `read:packages`.
+- Un `.env` con el tag de cada imagen (ver [Configuración](#configuración)).
+
+### Mac con chip Apple (M1, M2...)
+
+Las imágenes de los servicios se publican para `amd64`. En esas Macs la base de Postgres corre nativa, pero las imágenes propias hay que correrlas emuladas:
+
+```bash
+docker compose up -d permissions-db
+DOCKER_DEFAULT_PLATFORM=linux/amd64 docker compose up -d --no-deps permissions
+```
 
 ## Uso
 
@@ -68,6 +80,8 @@ cp .env.example .env
 
 - `.env` está en el `.gitignore`: es de cada máquina y nunca se sube.
 - `.env.example` sí se sube: documenta qué variables existen.
+- Los `*_TAG` (por ejemplo `PERMISSIONS_TAG`) son el SHA del commit de la imagen publicada. Se copia de la página del paquete en GitHub.
+
 
 ## Cómo agregar un servicio
 

@@ -2,31 +2,44 @@
 # Todos los servicios van en este archivo para compartir una misma red de Docker:
 # así se encuentran entre ellos por nombre de servicio (ej: http://printscript:8080).
 #
-# Todavía no levanta nada. Cada servicio se agrega cuando tenga su imagen disponible.
+# Cada servicio se agrega cuando tenga su imagen disponible.
 
-services: {}
+services:
+  permissions:
+    image: ghcr.io/ppc-ingsis/permissions-service:${PERMISSIONS_TAG:?falta-definir-PERMISSIONS_TAG-en-el-.env}
+    ports:
+      - "127.0.0.1:8081:8080" # solo desde esta máquina
+    environment:
+      SERVER_PORT: 8080
+      # La app trae localhost como host de la base: acá se pisa con el nombre del servicio
+      SPRING_DATASOURCE_URL: jdbc:postgresql://permissions-db:5432/${PERMISSIONS_DB_NAME:-permissions}
+      POSTGRES_USER: ${PERMISSIONS_DB_USER:-permissions}
+      POSTGRES_PASSWORD: ${PERMISSIONS_DB_PASSWORD:-permissions}
+    depends_on:
+      permissions-db:
+        condition: service_healthy
 
-# Plantilla para cada servicio propio (Snippets, Permisos, PrintScript):
-#
-#   <servicio>:
-#     image: ghcr.io/ing-sis-printscript/<servicio>:latest
-#     ports:
-#       - "127.0.0.1:<puerto de la tabla del README>:8080"   # solo desde esta máquina
-#     environment:
-#       SPRING_DATASOURCE_URL: jdbc:postgresql://<servicio>-db:5432/<base>
-#     depends_on:
-#       - <servicio>-db
-#
-#   <servicio>-db:
-#     image: postgres:18
-#     environment:
-#       POSTGRES_DB: <base>
-#       POSTGRES_USER: ${<SERVICIO>_DB_USER:-<base>}
-#       POSTGRES_PASSWORD: ${<SERVICIO>_DB_PASSWORD:-<base>}
-#     volumes:
-#       - <servicio>-db-data:/var/lib/postgresql
-#
-# Y al final del archivo, un volumen por base:
-#
-# volumes:
-#   <servicio>-db-data:
+  permissions-db:
+    image: postgres:18
+    ports:
+      - "127.0.0.1:5434:5432" # solo desde esta máquina
+    environment:
+      POSTGRES_DB: ${PERMISSIONS_DB_NAME:-permissions}
+      POSTGRES_USER: ${PERMISSIONS_DB_USER:-permissions}
+      POSTGRES_PASSWORD: ${PERMISSIONS_DB_PASSWORD:-permissions}
+    volumes:
+      - permissions-db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PERMISSIONS_DB_USER:-permissions} -d ${PERMISSIONS_DB_NAME:-permissions}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  permissions-db-data:
+
+# Plantilla para cada servicio propio (Snippets, PrintScript), siguiendo el de Permisos:
+#   - imagen: ghcr.io/ppc-ingsis/<repo>:${<SERVICIO>_TAG:?...}   (el tag es el SHA del commit)
+#   - puerto de la tabla del README, publicado en 127.0.0.1
+#   - su base <servicio>-db con healthcheck, y un volumen propio
+#   - variables nuevas: agregarlas a .env.example
