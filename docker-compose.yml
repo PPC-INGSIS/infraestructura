@@ -35,10 +35,18 @@ services:
       timeout: 3s
       retries: 10
 
+  printscript:
+    image: ghcr.io/ppc-ingsis/printscript-service:${PRINTSCRIPT_TAG:?falta-definir-PRINTSCRIPT_TAG-en-el-.env}
+    ports:
+      - "127.0.0.1:8082:8080" # solo desde esta máquina
+    environment:
+      # En desarrollo local (bootRun) escucha en 8082; acá escucha en 8080 como el resto
+      SERVER_PORT: 8080
+
 volumes:
   permissions-db-data:
 
-# Plantilla para cada servicio propio (Snippets, PrintScript), siguiendo el de Permisos:
+# Plantilla para cada servicio propio que falta (Snippets), siguiendo el de Permisos:
 #   - imagen: ghcr.io/ppc-ingsis/<repo>:${<SERVICIO>_TAG:?...}   (el tag es el SHA del commit)
 #   - puerto de la tabla del README, publicado en 127.0.0.1
 #   - su base <servicio>-db con healthcheck, y un volumen propio
