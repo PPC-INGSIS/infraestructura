@@ -6,7 +6,7 @@ No tiene código ni build. Son archivos de configuración.
 
 ## Estado
 
-- `docker-compose.yml`: levanta **Permisos** (con su base) y **PrintScript**. Los demás servicios se agregan cuando tengan su imagen disponible.
+- `docker-compose.yml`: levanta **Permisos**, **PrintScript** y **Snippets** (con sus bases). Los demás servicios se agregan cuando tengan su imagen disponible.
 - Workflow **VMs**: funcionando. Enciende y apaga las VMs de dev y prod (ver [Encender y apagar las VMs](#encender-y-apagar-las-vms)).
 
 ## Por qué un repo aparte
