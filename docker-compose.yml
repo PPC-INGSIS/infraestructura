@@ -43,10 +43,43 @@ services:
       # En desarrollo local (bootRun) escucha en 8082; acá escucha en 8080 como el resto
       SERVER_PORT: 8080
 
+  snippets:
+    image: ghcr.io/ppc-ingsis/snippet-service:${SNIPPETS_TAG:?falta-definir-SNIPPETS_TAG-en-el-.env}
+    ports:
+      - "127.0.0.1:8080:8080" # solo desde esta máquina
+    environment:
+      # La app trae localhost como host de la base y de PrintScript: acá se pisan con nombres de servicio
+      SPRING_DATASOURCE_URL: jdbc:postgresql://snippets-db:5432/${SNIPPETS_DB_NAME:-snippets}
+      POSTGRES_USER: ${SNIPPETS_DB_USER:-snippets}
+      POSTGRES_PASSWORD: ${SNIPPETS_DB_PASSWORD:-snippets}
+      PRINTSCRIPT_URL: http://printscript:8080
+    depends_on:
+      snippets-db:
+        condition: service_healthy
+      printscript:
+        condition: service_started
+
+  snippets-db:
+    image: postgres:18
+    ports:
+      - "127.0.0.1:5433:5432" # solo desde esta máquina
+    environment:
+      POSTGRES_DB: ${SNIPPETS_DB_NAME:-snippets}
+      POSTGRES_USER: ${SNIPPETS_DB_USER:-snippets}
+      POSTGRES_PASSWORD: ${SNIPPETS_DB_PASSWORD:-snippets}
+    volumes:
+      - snippets-db-data:/var/lib/postgresql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${SNIPPETS_DB_USER:-snippets} -d ${SNIPPETS_DB_NAME:-snippets}" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
 volumes:
   permissions-db-data:
+  snippets-db-data:
 
-# Plantilla para cada servicio propio que falta (Snippets), siguiendo el de Permisos:
+# Plantilla para cada servicio nuevo, siguiendo el de Permisos o el de Snippets:
 #   - imagen: ghcr.io/ppc-ingsis/<repo>:${<SERVICIO>_TAG:?...}   (el tag es el SHA del commit)
 #   - puerto de la tabla del README, publicado en 127.0.0.1
 #   - su base <servicio>-db con healthcheck, y un volumen propio
