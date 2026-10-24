@@ -6,8 +6,50 @@
 #
 # OJO: en los mensajes de ${VAR:?mensaje} no usar guiones. `docker stack deploy` los
 # toma como valor por defecto y deploya una imagen con un tag equivocado, sin fallar.
+#
+# Las contraseñas de las bases son secrets de Swarm, creados a mano en cada VM antes del
+# primer deploy:  docker secret create <nombre> -
 
 services:
+  permissions:
+    image: ghcr.io/ppc-ingsis/permissions-service:${PERMISSIONS_TAG:?falta_definir_PERMISSIONS_TAG}
+    environment:
+      SERVER_PORT: 8080
+      SPRING_DATASOURCE_URL: jdbc:postgresql://permissions-db:5432/${PERMISSIONS_DB_NAME:-permissions}
+      POSTGRES_USER: ${PERMISSIONS_DB_USER:-permissions}
+      # Spring lee cada archivo de /run/secrets/ como una propiedad con el nombre del archivo:
+      # así ${POSTGRES_PASSWORD} del application.properties sale del secret
+      SPRING_CONFIG_IMPORT: optional:configtree:/run/secrets/
+    secrets:
+      - source: permissions_db_password
+        target: POSTGRES_PASSWORD
+    deploy:
+      replicas: 1
+      update_config:
+        # Arranca el contenedor nuevo antes de apagar el viejo, para no cortar el servicio
+        order: start-first
+
+  permissions-db:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: ${PERMISSIONS_DB_NAME:-permissions}
+      POSTGRES_USER: ${PERMISSIONS_DB_USER:-permissions}
+      POSTGRES_PASSWORD_FILE: /run/secrets/permissions_db_password
+    secrets:
+      - permissions_db_password
+    volumes:
+      - permissions-db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PERMISSIONS_DB_USER:-permissions} -d ${PERMISSIONS_DB_NAME:-permissions}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy:
+      replicas: 1
+      update_config:
+        # Nunca dos bases sobre los mismos datos: apaga la vieja antes de arrancar la nueva
+        order: stop-first
+
   printscript:
     image: ghcr.io/ppc-ingsis/printscript-service:${PRINTSCRIPT_TAG:?falta_definir_PRINTSCRIPT_TAG}
     environment:
@@ -17,3 +59,10 @@ services:
       update_config:
         # Arranca el contenedor nuevo antes de apagar el viejo, para no cortar el servicio
         order: start-first
+
+secrets:
+  permissions_db_password:
+    external: true # se crea a mano en cada VM; el stack solo lo referencia
+
+volumes:
+  permissions-db-data:
