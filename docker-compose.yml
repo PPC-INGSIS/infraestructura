@@ -75,9 +75,28 @@ services:
       timeout: 3s
       retries: 10
 
+  asset-service:
+    # La cátedra publica solo `latest`, no hay un tag fijo para elegir
+    image: ghcr.io/austral-ingsis/snippet-asset-service:latest
+    ports:
+      - "127.0.0.1:8083:8080" # solo desde esta máquina
+    environment:
+      AZURE_HOST: http://azurite
+      # El entrypoint carga el agente de New Relic; sin licencia, se apaga
+      NEW_RELIC_AGENT_ENABLED: "false"
+    depends_on:
+      azurite:
+        condition: service_started
+
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    volumes:
+      - azurite-data:/data
+
 volumes:
   permissions-db-data:
   snippets-db-data:
+  azurite-data:
 
 # Plantilla para cada servicio nuevo, siguiendo el de Permisos o el de Snippets:
 #   - imagen: ghcr.io/ppc-ingsis/<repo>:${<SERVICIO>_TAG:?...}   (el tag es el SHA del commit)
