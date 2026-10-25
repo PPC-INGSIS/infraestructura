@@ -1,7 +1,8 @@
 name: Deploy
 
-# Despliega el stack en la VM de un entorno: copia stack.yml y <entorno>.env, y corre
-# `docker stack deploy` con las versiones (tags) de ese .env.
+# Despliega el stack en el Swarm de un entorno. El runner le habla al Docker de la VM
+# por SSH (docker context) y corre `docker stack deploy` con los tags del <entorno>.env.
+# El login en ghcr.io se hace acá, en el runner: la VM no guarda ningún token.
 
 on:
   workflow_dispatch:
@@ -56,34 +57,34 @@ jobs:
             BatchMode yes
           EOF
 
-      - name: Copiar archivos a la VM
+      - name: Crear contexto de Docker hacia la VM
+        run: docker context create vm --docker "host=ssh://vm"
+
+      - name: Login en ghcr.io
         env:
-          ENTORNO: ${{ inputs.entorno }}
-        run: |
-          ssh vm 'mkdir -p ~/deploy'
-          scp stack.yml "$ENTORNO.env" vm:~/deploy/
+          GHCR_USER: ${{ vars.GHCR_USER }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 
       - name: Desplegar y esperar
         env:
           ENTORNO: ${{ inputs.entorno }}
+          # Todos los `docker` de este paso le hablan a la VM, no al Docker del runner
+          DOCKER_CONTEXT: vm
         run: |
-          ssh vm bash -s "$ENTORNO" "$STACK" <<'EOF'
           set -euo pipefail
-          entorno="$1"
-          stack="$2"
-          cd ~/deploy
 
           # Carga los tags del entorno como variables para el deploy
           set -a
-          . "./$entorno.env"
+          . "./$ENTORNO.env"
           set +a
 
-          docker stack deploy --with-registry-auth -c stack.yml "$stack"
+          docker stack deploy --with-registry-auth -c stack.yml "$STACK"
 
           # Espera hasta 5 minutos a que todos estén en N/N y sin actualizaciones en curso
           for _ in $(seq 1 60); do
             listo=1
-            for servicio in $(docker stack services "$stack" --format '{{.Name}}'); do
+            for servicio in $(docker stack services "$STACK" --format '{{.Name}}'); do
               estado=$(docker service inspect "$servicio" --format '{{if .UpdateStatus}}{{.UpdateStatus.State}}{{end}}')
               case "$estado" in
                 ""|completed) ;;
@@ -95,19 +96,18 @@ jobs:
                   ;;
               esac
             done
-            if docker stack services "$stack" --format '{{.Replicas}}' | awk -F'[/ ]' '$1 != $2 { exit 1 }'; then
+            if docker stack services "$STACK" --format '{{.Replicas}}' | awk -F'[/ ]' '$1 != $2 { exit 1 }'; then
               :
             else
               listo=0
             fi
             if [ "$listo" -eq 1 ]; then
-              docker stack services "$stack"
+              docker stack services "$STACK"
               exit 0
             fi
             sleep 5
           done
 
           echo "Los servicios no llegaron al estado deseado a tiempo"
-          docker stack services "$stack"
+          docker stack services "$STACK"
           exit 1
-          EOF
