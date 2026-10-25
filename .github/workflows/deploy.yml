@@ -3,8 +3,18 @@ name: Deploy
 # Despliega el stack en el Swarm de un entorno. El runner le habla al Docker de la VM
 # por SSH (docker context) y corre `docker stack deploy` con los tags del <entorno>.env.
 # El login en ghcr.io se hace acá, en el runner: la VM no necesita un docker login manual.
+#
+# - dev: se despliega solo cuando cambia dev.env o stack.yml en main.
+# - prod: solo a mano (workflow_dispatch). Un cambio en prod.env no dispara nada.
+# Las VMs se prenden a mano (workflow VMs); con la VM apagada este workflow falla en el
+# paso "Verificar que la VM responde".
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - dev.env
+      - stack.yml
   workflow_dispatch:
     inputs:
       entorno:
@@ -20,7 +30,7 @@ permissions:
 
 # Un solo deploy por entorno a la vez
 concurrency:
-  group: deploy-${{ inputs.entorno }}
+  group: deploy-${{ inputs.entorno || 'dev' }}
   cancel-in-progress: false
 
 env:
@@ -31,7 +41,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     # De acá salen SSH_HOST, SSH_USER, SSH_KNOWN_HOSTS y SSH_PRIVATE_KEY
-    environment: ${{ inputs.entorno }}
+    environment: ${{ inputs.entorno || 'dev' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -57,6 +67,13 @@ jobs:
             BatchMode yes
           EOF
 
+      - name: Verificar que la VM responde
+        run: |
+          if ! ssh -o ConnectTimeout=20 vm true; then
+            echo "::error::La VM no responde por SSH. ¿Está prendida? Prendela con el workflow VMs y volvé a correr este deploy."
+            exit 1
+          fi
+
       - name: Crear contexto de Docker hacia la VM
         run: docker context create vm --docker "host=ssh://vm"
 
@@ -68,7 +85,7 @@ jobs:
 
       - name: Desplegar y esperar
         env:
-          ENTORNO: ${{ inputs.entorno }}
+          ENTORNO: ${{ inputs.entorno || 'dev' }}
           # Todos los `docker` de este paso le hablan a la VM, no al Docker del runner
           DOCKER_CONTEXT: vm
         run: |
