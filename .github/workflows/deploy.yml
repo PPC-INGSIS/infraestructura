@@ -2,7 +2,7 @@ name: Deploy
 
 # Despliega el stack en el Swarm de un entorno. El runner le habla al Docker de la VM
 # por SSH (docker context) y corre `docker stack deploy` con los tags del <entorno>.env.
-# El login en ghcr.io se hace acá, en el runner: la VM no guarda ningún token.
+# El login en ghcr.io se hace acá, en el runner: la VM no necesita un docker login manual.
 
 on:
   workflow_dispatch:
