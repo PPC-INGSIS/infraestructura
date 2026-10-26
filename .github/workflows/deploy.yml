@@ -143,3 +143,12 @@ jobs:
           echo "Los servicios no llegaron al estado deseado a tiempo"
           docker stack services "$STACK"
           exit 1
+
+      - name: Estado de las tareas
+        env:
+          DOCKER_CONTEXT: vm
+        run: |
+          # Cada tarea con su edad: un servicio que no cambió conserva la edad que tenía,
+          # y uno que se actualizó aparece con la tarea nueva y la anterior en Shutdown.
+          docker stack ps "$STACK" --no-trunc \
+            --format 'table {{.Name}}\t{{.Image}}\t{{.DesiredState}}\t{{.CurrentState}}'
