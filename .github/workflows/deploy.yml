@@ -1,24 +1,27 @@
 name: Deploy
 
 # Despliega el stack en el Swarm de un entorno. El runner le habla al Docker de la VM
-# por SSH (docker context) y corre `docker stack deploy` con los tags del <entorno>.env.
+# por SSH (docker context) y corre `docker stack deploy` con los tags de versiones.env.
 # El login en ghcr.io se hace acá, en el runner: la VM no necesita un docker login manual.
 #
-# - dev: se despliega solo cuando cambia dev.env o stack.yml en main.
-# - prod: solo a mano (workflow_dispatch). Un cambio en prod.env no dispara nada.
+# El entorno sale de la rama (gitflow):
+# - dev: se despliega solo cuando cambia versiones.env o stack.yml en la rama dev.
+# - prod: se despliega solo cuando cambia versiones.env o stack.yml en main, o sea,
+#   cuando se mergea dev en main. Ese PR es el release.
+# - A mano (workflow_dispatch): prod solo desde main, y dev desde cualquier otra rama.
 # Las VMs se prenden a mano (workflow VMs); con la VM apagada este workflow falla en el
 # paso "Verificar que la VM responde".
 
 on:
   push:
-    branches: [main]
+    branches: [dev, main]
     paths:
-      - dev.env
+      - versiones.env
       - stack.yml
   workflow_dispatch:
     inputs:
       entorno:
-        description: "A qué entorno desplegar"
+        description: "A qué entorno desplegar (prod solo desde main)"
         required: true
         type: choice
         options:
@@ -30,19 +33,32 @@ permissions:
 
 # Un solo deploy por entorno a la vez
 concurrency:
-  group: deploy-${{ inputs.entorno || 'dev' }}
+  group: deploy-${{ inputs.entorno || (github.ref_name == 'main' && 'prod' || 'dev') }}
   cancel-in-progress: false
 
 env:
   STACK: snippet-searcher
+  # En un push, la rama decide el entorno: main es prod y el resto es dev
+  ENTORNO: ${{ inputs.entorno || (github.ref_name == 'main' && 'prod' || 'dev') }}
 
 jobs:
   deploy:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     # De acá salen SSH_HOST, SSH_USER, SSH_KNOWN_HOSTS y SSH_PRIVATE_KEY
-    environment: ${{ inputs.entorno || 'dev' }}
+    environment: ${{ inputs.entorno || (github.ref_name == 'main' && 'prod' || 'dev') }}
     steps:
+      - name: Verificar que la rama corresponde al entorno
+        run: |
+          if [ "$ENTORNO" = prod ] && [ "$GITHUB_REF_NAME" != main ]; then
+            echo "::error::Prod solo se despliega desde main: el release es el PR de dev a main."
+            exit 1
+          fi
+          if [ "$ENTORNO" = dev ] && [ "$GITHUB_REF_NAME" = main ]; then
+            echo "::error::main es prod: no se despliega a dev desde main."
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v7
 
@@ -85,15 +101,14 @@ jobs:
 
       - name: Desplegar y esperar
         env:
-          ENTORNO: ${{ inputs.entorno || 'dev' }}
           # Todos los `docker` de este paso le hablan a la VM, no al Docker del runner
           DOCKER_CONTEXT: vm
         run: |
           set -euo pipefail
 
-          # Carga los tags del entorno como variables para el deploy
+          # Carga los tags de esta rama como variables para el deploy
           set -a
-          . "./$ENTORNO.env"
+          . ./versiones.env
           set +a
 
           docker stack deploy --with-registry-auth -c stack.yml "$STACK"
