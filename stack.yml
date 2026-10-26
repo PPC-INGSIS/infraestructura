@@ -30,7 +30,7 @@ services:
         order: start-first
 
   permissions-db:
-    image: postgres:18
+    image: postgres:18@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6
     environment:
       POSTGRES_DB: ${PERMISSIONS_DB_NAME:-permissions}
       POSTGRES_USER: ${PERMISSIONS_DB_USER:-permissions}
@@ -77,7 +77,7 @@ services:
         order: start-first
 
   snippets-db:
-    image: postgres:18
+    image: postgres:18@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6
     environment:
       POSTGRES_DB: ${SNIPPETS_DB_NAME:-snippets}
       POSTGRES_USER: ${SNIPPETS_DB_USER:-snippets}
@@ -99,7 +99,7 @@ services:
 
   asset-service:
     # La cátedra publica solo `latest`, no hay un tag fijo para elegir
-    image: ghcr.io/austral-ingsis/snippet-asset-service:latest
+    image: ghcr.io/austral-ingsis/snippet-asset-service:latest@sha256:eacad54bf95717c5483619ad1fe45a9b4a0012a37b451c37baf13e6f43200656
     environment:
       AZURE_HOST: http://azurite
       # El entrypoint carga el agente de New Relic; sin licencia, se apaga
@@ -111,7 +111,7 @@ services:
         order: start-first
 
   azurite:
-    image: mcr.microsoft.com/azure-storage/azurite:latest
+    image: mcr.microsoft.com/azure-storage/azurite:latest@sha256:830430c1da1a2d537e08f3e6764dd1f5ae00cf0346bcaf625b968ec3f0971fd5
     volumes:
       - azurite-data:/data
     deploy:
