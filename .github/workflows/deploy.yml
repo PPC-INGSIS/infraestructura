@@ -126,36 +126,8 @@ jobs:
 
           docker stack deploy --with-registry-auth -c stack.yml "$STACK"
 
-          # Espera hasta 5 minutos a que todos estén en N/N y sin actualizaciones en curso
-          for _ in $(seq 1 60); do
-            listo=1
-            for servicio in $(docker stack services "$STACK" --format '{{.Name}}'); do
-              estado=$(docker service inspect "$servicio" --format '{{if .UpdateStatus}}{{.UpdateStatus.State}}{{end}}')
-              case "$estado" in
-                ""|completed) ;;
-                updating) listo=0 ;;
-                *)
-                  echo "$servicio: la actualización quedó en '$estado'"
-                  docker service ps "$servicio" --no-trunc
-                  exit 1
-                  ;;
-              esac
-            done
-            if docker stack services "$STACK" --format '{{.Replicas}}' | awk -F'[/ ]' '$1 != $2 { exit 1 }'; then
-              :
-            else
-              listo=0
-            fi
-            if [ "$listo" -eq 1 ]; then
-              docker stack services "$STACK"
-              exit 0
-            fi
-            sleep 5
-          done
-
-          echo "Los servicios no llegaron al estado deseado a tiempo"
-          docker stack services "$STACK"
-          exit 1
+          # Espera hasta 5 minutos a que todo esté en N/N y sin actualizaciones en curso
+          bash scripts/esperar-stack.sh "$STACK"
 
       - name: Estado de las tareas
         env:
