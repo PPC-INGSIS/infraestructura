@@ -99,6 +99,19 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
         run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 
+      - name: Crear la red edge si no existe
+        env:
+          # Le habla al Docker de la VM, no al del runner
+          DOCKER_CONTEXT: vm
+        run: |
+          # Red overlay que comparten este stack y el de nginx (stack.yml la declara external).
+          # Si ya existe no hace nada, así el deploy se puede correr las veces que haga falta.
+          if docker network inspect edge >/dev/null 2>&1; then
+            echo "La red edge ya existe"
+          else
+            docker network create --driver overlay edge
+          fi
+
       - name: Desplegar y esperar
         env:
           # Todos los `docker` de este paso le hablan a la VM, no al Docker del runner
