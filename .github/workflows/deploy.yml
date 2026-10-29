@@ -5,9 +5,9 @@ name: Deploy
 # El login en ghcr.io se hace acá, en el runner: la VM no necesita un docker login manual.
 #
 # El entorno sale de la rama (gitflow):
-# - dev: se despliega solo cuando cambia versiones.env o stack.yml en la rama dev.
-# - prod: se despliega solo cuando cambia versiones.env o stack.yml en main, o sea,
-#   cuando se mergea dev en main. Ese PR es el release.
+# - dev: se despliega solo cuando cambia versiones.env, stack.yml o la config de nginx
+#   (nginx/) en la rama dev.
+# - prod: lo mismo en main, o sea, cuando se mergea dev en main. Ese PR es el release.
 # - A mano (workflow_dispatch): prod solo desde main, y dev desde cualquier otra rama.
 # Las VMs se prenden a mano (workflow VMs); con la VM apagada este workflow falla en el
 # paso "Verificar que la VM responde".
@@ -18,6 +18,7 @@ on:
     paths:
       - versiones.env
       - stack.yml
+      - nginx/**
   workflow_dispatch:
     inputs:
       entorno:
@@ -110,6 +111,10 @@ jobs:
           set -a
           . ./versiones.env
           set +a
+
+          # Huella de la config de nginx: va en el nombre de la Swarm config (ver stack.yml).
+          NGINX_CONF_HASH=$(sha256sum nginx/default.conf | cut -c1-12)
+          export NGINX_CONF_HASH
 
           docker stack deploy --with-registry-auth -c stack.yml "$STACK"
 
