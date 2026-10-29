@@ -136,6 +136,9 @@ services:
       - source: nginx_conf
         # Va a templates/: al arrancar, la imagen completa la plantilla y deja el resultado en conf.d/
         target: /etc/nginx/templates/default.conf.template
+    volumes:
+      # Donde certbot deja los archivos del desafío de Let's Encrypt. nginx solo los lee.
+      - certbot-www:/var/www/certbot:ro
     deploy:
       replicas: 1
       update_config:
@@ -152,6 +155,7 @@ volumes:
   permissions-db-data:
   snippets-db-data:
   azurite-data:
+  certbot-www:
 
 configs:
   nginx_conf:
