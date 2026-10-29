@@ -70,11 +70,6 @@ services:
     secrets:
       - source: snippets_db_password
         target: POSTGRES_PASSWORD
-    networks:
-      # default: la red de este stack (PrintScript y su base).
-      # edge: la red compartida con el stack de nginx. nginx solo ve lo que está en edge.
-      - default
-      - edge
     deploy:
       replicas: 1
       update_config:
@@ -135,8 +130,3 @@ volumes:
   permissions-db-data:
   snippets-db-data:
   azurite-data:
-
-networks:
-  edge:
-    # La crea el deploy (deploy.yml) antes de desplegar. La comparten este stack y el de nginx.
-    external: true
