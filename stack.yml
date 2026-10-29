@@ -1,8 +1,9 @@
 # Stack de Snippet Searcher para las VMs (Docker Swarm).
 # Para desarrollar en tu máquina se usa docker-compose.yml.
 #
-# Acá no se publican puertos: los servicios se hablan por nombre dentro de la red
-# del stack, y hacia afuera el único que va a atender es nginx (etapa siguiente).
+# Desde afuera solo se entra por nginx (puerto 80; el 443 llega con HTTPS): es el único
+# servicio con `ports`. Los demás no publican nada y se hablan por nombre dentro de la red
+# del stack. nginx también les llega por nombre, por esa misma red.
 #
 # OJO: en los mensajes de ${VAR:?mensaje} no usar guiones. `docker stack deploy` los
 # toma como valor por defecto y deploya una imagen con un tag equivocado, sin fallar.
@@ -120,6 +121,23 @@ services:
         # Guarda archivos: nunca dos instancias sobre los mismos datos
         order: stop-first
 
+  nginx:
+    image: nginx:1.30-alpine@sha256:47928bf67eb62a1863cb08d9ecb52d3e704304ba614eaee17884204677702951
+    ports:
+      # HTTP. El 443 se suma con HTTPS.
+      - target: 80
+        published: 80
+        protocol: tcp
+        mode: ingress
+    configs:
+      - source: nginx_conf
+        target: /etc/nginx/conf.d/default.conf
+    deploy:
+      replicas: 1
+      update_config:
+        # Arranca el contenedor nuevo antes de apagar el viejo, para no cortar el servicio
+        order: start-first
+
 secrets:
   permissions_db_password:
     external: true # se crea a mano en cada VM; el stack solo lo referencia
@@ -130,3 +148,11 @@ volumes:
   permissions-db-data:
   snippets-db-data:
   azurite-data:
+
+configs:
+  nginx_conf:
+    # Una config no se puede editar: el nombre lleva la huella del archivo (NGINX_CONF_HASH,
+    # la calcula deploy.yml). Mismo archivo, mismo nombre: Swarm no toca nginx. Archivo
+    # distinto: config nueva y Swarm reemplaza solo nginx.
+    name: snippet-searcher_nginx_conf_${NGINX_CONF_HASH:?falta_definir_NGINX_CONF_HASH}
+    file: ./nginx/default.conf
