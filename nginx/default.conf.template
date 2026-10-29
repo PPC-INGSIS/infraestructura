@@ -1,7 +1,11 @@
 # Borde de Snippet Searcher: el único punto de entrada desde afuera.
+# Es una plantilla: al arrancar, la imagen de nginx reemplaza DOMINIO por la variable de entorno
+# del servicio (sale del GitHub Environment) y deja el resultado en /etc/nginx/conf.d/default.conf.
+# Las variables propias de nginx ($host y demás) no se tocan.
 # Por ahora solo HTTP en el 80. HTTPS (certbot y el 443) va en el PR siguiente.
 server {
     listen 80;
+    server_name ${DOMINIO};
 
     # La API: /api/... va a Snippets sin el prefijo (/api/snippets llega como /snippets).
     # La barra final de proxy_pass es la que saca el /api.
