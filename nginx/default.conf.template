@@ -7,6 +7,12 @@ server {
     listen 80;
     server_name ${DOMINIO};
 
+    # Desafío de Let's Encrypt (HTTP-01): certbot deja un archivo en el volumen certbot-www y
+    # Let's Encrypt lo pide por acá para comprobar que el dominio es nuestro. Va por HTTP (80).
+    location /.well-known/acme-challenge/ {
+            root /var/www/certbot;
+    }
+
     # La API: /api/... va a Snippets sin el prefijo (/api/snippets llega como /snippets).
     # La barra final de proxy_pass es la que saca el /api.
     location /api/ {
