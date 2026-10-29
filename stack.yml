@@ -123,6 +123,9 @@ services:
 
   nginx:
     image: nginx:1.30-alpine@sha256:47928bf67eb62a1863cb08d9ecb52d3e704304ba614eaee17884204677702951
+    environment:
+      # Dominio de este ambiente (sale del GitHub Environment): lo usa la plantilla de nginx.
+      DOMINIO: ${DOMINIO:?falta_definir_DOMINIO}
     ports:
       # HTTP. El 443 se suma con HTTPS.
       - target: 80
@@ -131,7 +134,8 @@ services:
         mode: ingress
     configs:
       - source: nginx_conf
-        target: /etc/nginx/conf.d/default.conf
+        # Va a templates/: al arrancar, la imagen completa la plantilla y deja el resultado en conf.d/
+        target: /etc/nginx/templates/default.conf.template
     deploy:
       replicas: 1
       update_config:
@@ -155,4 +159,4 @@ configs:
     # la calcula deploy.yml). Mismo archivo, mismo nombre: Swarm no toca nginx. Archivo
     # distinto: config nueva y Swarm reemplaza solo nginx.
     name: snippet-searcher_nginx_conf_${NGINX_CONF_HASH:?falta_definir_NGINX_CONF_HASH}
-    file: ./nginx/default.conf
+    file: ./nginx/default.conf.template

@@ -104,6 +104,8 @@ jobs:
         env:
           # Todos los `docker` de este paso le hablan a la VM, no al Docker del runner
           DOCKER_CONTEXT: vm
+          # Dominio de este ambiente (variable del GitHub Environment): lo usa nginx
+          DOMINIO: ${{ vars.DOMINIO }}
         run: |
           set -euo pipefail
 
@@ -113,7 +115,7 @@ jobs:
           set +a
 
           # Huella de la config de nginx: va en el nombre de la Swarm config (ver stack.yml).
-          NGINX_CONF_HASH=$(sha256sum nginx/default.conf | cut -c1-12)
+          NGINX_CONF_HASH=$(sha256sum nginx/default.conf.template | cut -c1-12)
           export NGINX_CONF_HASH
 
           docker stack deploy --with-registry-auth -c stack.yml "$STACK"
