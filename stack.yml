@@ -145,6 +145,24 @@ services:
         # Arranca el contenedor nuevo antes de apagar el viejo, para no cortar el servicio
         order: start-first
 
+  certbot:
+    # Pide el certificado de DOMINIO la primera vez y después lo renueva (certbot/certbot.sh)
+    image: certbot/certbot:v5.9.0@sha256:bc93cb710b413e6b456d622f9b0133b3e109c0a78c2ed9976af43d209b0a1805
+    # La imagen arranca `certbot` directo; acá corre el script, que lo llama en un loop
+    entrypoint: [ "sh", "/certbot.sh" ]
+    environment:
+      DOMINIO: ${DOMINIO:?falta_definir_DOMINIO}
+    configs:
+      - source: certbot_script
+        target: /certbot.sh
+    volumes:
+      # Escribe el archivo del desafío; nginx lo lee del mismo volumen
+      - certbot-www:/var/www/certbot
+      # Certificado, clave privada y cuenta de Let's Encrypt. La clave nunca sale de la VM.
+      - letsencrypt:/etc/letsencrypt
+    deploy:
+      replicas: 1
+
 secrets:
   permissions_db_password:
     external: true # se crea a mano en cada VM; el stack solo lo referencia
@@ -156,6 +174,7 @@ volumes:
   snippets-db-data:
   azurite-data:
   certbot-www:
+  letsencrypt:
 
 configs:
   nginx_conf:
@@ -164,3 +183,7 @@ configs:
     # distinto: config nueva y Swarm reemplaza solo nginx.
     name: snippet-searcher_nginx_conf_${NGINX_CONF_HASH:?falta_definir_NGINX_CONF_HASH}
     file: ./nginx/default.conf.template
+  certbot_script:
+    # Igual que nginx_conf: la huella en el nombre hace que un cambio en el script reemplace certbot
+    name: snippet-searcher_certbot_script_${CERTBOT_SCRIPT_HASH:?falta_definir_CERTBOT_SCRIPT_HASH}
+    file: ./certbot/certbot.sh
