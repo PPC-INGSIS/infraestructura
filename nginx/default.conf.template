@@ -1,17 +1,32 @@
 # Borde de Snippet Searcher: el único punto de entrada desde afuera.
 # Es una plantilla: al arrancar, la imagen de nginx reemplaza DOMINIO por la variable de entorno
 # del servicio (sale del GitHub Environment) y deja el resultado en /etc/nginx/conf.d/default.conf.
-# Las variables propias de nginx ($host y demás) no se tocan.
-# Por ahora solo HTTP en el 80. HTTPS (certbot y el 443) va en el PR siguiente.
+# Las variables propias de nginx ($host, $request_uri y demás) no se tocan.
+
+# HTTP (80): solo el desafío de Let's Encrypt. Todo lo demás se redirige a HTTPS.
 server {
     listen 80;
     server_name ${DOMINIO};
 
-    # Desafío de Let's Encrypt (HTTP-01): certbot deja un archivo en el volumen certbot-www y
-    # Let's Encrypt lo pide por acá para comprobar que el dominio es nuestro. Va por HTTP (80).
+    # Desafío HTTP-01: certbot deja el archivo en el volumen certbot-www y Let's Encrypt lo pide
+    # por acá. Tiene que ser por HTTP: es como se prueba el dominio antes de tener certificado.
     location /.well-known/acme-challenge/ {
-            root /var/www/certbot;
+        root /var/www/certbot;
     }
+
+    location / {
+        return 301 https://${DOMINIO}$request_uri;
+    }
+}
+
+# HTTPS (443): acá termina TLS. Hacia los servicios sigue HTTP plano, por la red del stack.
+# El certificado lo consigue y lo renueva el servicio certbot (volumen letsencrypt).
+server {
+    listen 443 ssl;
+    server_name ${DOMINIO};
+
+    ssl_certificate     /etc/letsencrypt/live/${DOMINIO}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMINIO}/privkey.pem;
 
     # La API: /api/... va a Snippets sin el prefijo (/api/snippets llega como /snippets).
     # La barra final de proxy_pass es la que saca el /api.
