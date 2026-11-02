@@ -35,8 +35,9 @@ server {
         proxy_set_header Host $host;
     }
 
-    # Todo lo demás, por ahora, 404. La UI va a ir acá más adelante.
+    # Todo lo demás es la UI, servida por su propio nginx en el servicio ui.
     location / {
-        return 404;
+        proxy_pass http://ui:80;
+        proxy_set_header Host $host;
     }
 }
