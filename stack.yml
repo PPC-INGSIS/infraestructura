@@ -121,6 +121,16 @@ services:
         # Guarda archivos: nunca dos instancias sobre los mismos datos
         order: stop-first
 
+  ui:
+    # La UI (React) servida por su propio nginx en el 80. No publica puertos: el tráfico le
+    # llega desde el nginx de borde, por la red del stack.
+    image: ghcr.io/ppc-ingsis/printscript-ui:${UI_TAG:?falta_definir_UI_TAG}
+    deploy:
+      replicas: 1
+      update_config:
+        # Arranca el contenedor nuevo antes de apagar el viejo, para no cortar el servicio
+        order: start-first
+
   nginx:
     image: nginx:1.30-alpine@sha256:47928bf67eb62a1863cb08d9ecb52d3e704304ba614eaee17884204677702951
     environment:
