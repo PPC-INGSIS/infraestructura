@@ -124,21 +124,32 @@ services:
   nginx:
     image: nginx:1.30-alpine@sha256:47928bf67eb62a1863cb08d9ecb52d3e704304ba614eaee17884204677702951
     environment:
-      # Dominio de este ambiente (sale del GitHub Environment): lo usa la plantilla de nginx.
+      # Dominio de este ambiente (sale del GitHub Environment): lo usan la plantilla y el script.
       DOMINIO: ${DOMINIO:?falta_definir_DOMINIO}
     ports:
-      # HTTP. El 443 se suma con HTTPS.
+      # HTTP: desafío de Let's Encrypt y redirección a HTTPS
       - target: 80
         published: 80
+        protocol: tcp
+        mode: ingress
+      # HTTPS
+      - target: 443
+        published: 443
         protocol: tcp
         mode: ingress
     configs:
       - source: nginx_conf
         # Va a templates/: al arrancar, la imagen completa la plantilla y deja el resultado en conf.d/
         target: /etc/nginx/templates/default.conf.template
+      - source: nginx_certificado
+        # La imagen corre los scripts de esta carpeta antes de arrancar nginx, solo si son ejecutables
+        target: /docker-entrypoint.d/40-certificado.sh
+        mode: 0555
     volumes:
       # Donde certbot deja los archivos del desafío de Let's Encrypt. nginx solo los lee.
       - certbot-www:/var/www/certbot:ro
+      # Certificado y clave privada. Los escribe certbot; nginx solo los lee.
+      - letsencrypt:/etc/letsencrypt:ro
     deploy:
       replicas: 1
       update_config:
@@ -187,3 +198,7 @@ configs:
     # Igual que nginx_conf: la huella en el nombre hace que un cambio en el script reemplace certbot
     name: snippet-searcher_certbot_script_${CERTBOT_SCRIPT_HASH:?falta_definir_CERTBOT_SCRIPT_HASH}
     file: ./certbot/certbot.sh
+  nginx_certificado:
+    # Script de arranque de nginx: espera el certificado y recarga cuando cambia
+    name: snippet-searcher_nginx_certificado_${NGINX_CERT_HASH:?falta_definir_NGINX_CERT_HASH}
+    file: ./nginx/40-certificado.sh

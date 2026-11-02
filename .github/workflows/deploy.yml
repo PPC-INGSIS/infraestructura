@@ -121,6 +121,9 @@ jobs:
           # Lo mismo con el script de certbot
           CERTBOT_SCRIPT_HASH=$(sha256sum certbot/certbot.sh | cut -c1-12)
           export CERTBOT_SCRIPT_HASH
+          # Y con el script de arranque de nginx
+          NGINX_CERT_HASH=$(sha256sum nginx/40-certificado.sh | cut -c1-12)
+          export NGINX_CERT_HASH
 
           docker stack deploy --with-registry-auth -c stack.yml "$STACK"
 
