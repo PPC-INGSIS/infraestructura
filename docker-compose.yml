@@ -53,11 +53,15 @@ services:
       POSTGRES_USER: ${SNIPPETS_DB_USER:-snippets}
       POSTGRES_PASSWORD: ${SNIPPETS_DB_PASSWORD:-snippets}
       PRINTSCRIPT_URL: http://printscript:8080
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
     depends_on:
       snippets-db:
         condition: service_healthy
       printscript:
         condition: service_started
+      redis:
+        condition: service_healthy
 
   snippets-db:
     image: postgres:18
@@ -71,6 +75,19 @@ services:
       - snippets-db-data:/var/lib/postgresql
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${SNIPPETS_DB_USER:-snippets} -d ${SNIPPETS_DB_NAME:-snippets}" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:6379:6379" # solo desde esta máquina
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -96,6 +113,7 @@ services:
 volumes:
   permissions-db-data:
   snippets-db-data:
+  redis-data:
   azurite-data:
 
 # Plantilla para cada servicio nuevo, siguiendo el de Permisos o el de Snippets:
