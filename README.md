@@ -168,7 +168,7 @@ En cada VM, nginx es el único servicio que se ve desde afuera.
 
 El dominio de cada uno es la variable `DOMINIO` del Environment del repo, y la config de nginx es una plantilla que lo completa al arrancar.
 
-- **443 (HTTPS)**: acá termina TLS. `/api/...` va a Snippets sin el prefijo (`/api/snippets` llega como `/snippets`) y todo lo demás va a la UI. Hacia adentro sigue HTTP plano, por la red del stack.
+- **443 (HTTPS)**: acá termina TLS. `/api/...` va a Snippets sin el prefijo (`/api/snippets` llega como `/snippets`), salvo `/api/actuator`, que responde 404 (Actuator no se ve desde afuera). Todo lo demás va a la UI. Hacia adentro sigue HTTP plano, por la red del stack.
 - **80 (HTTP)**: solo atiende el desafío de Let's Encrypt; todo lo demás se redirige a HTTPS.
 
 El certificado lo consigue y lo renueva el servicio **certbot**, solo:

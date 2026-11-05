@@ -31,6 +31,13 @@ server {
     ssl_certificate     /etc/letsencrypt/live/${DOMINIO}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${DOMINIO}/privkey.pem;
 
+    # Actuator es la administración de Spring: desde afuera no se ve. Sin barra final, para que
+    # también agarre /api/actuator a secas (el índice de endpoints). El healthcheck de Swarm corre
+    # adentro de cada contenedor y no pasa por acá.
+    location /api/actuator {
+        return 404;
+    }
+
     # La API: /api/... va a Snippets sin el prefijo (/api/snippets llega como /snippets).
     # La barra final de proxy_pass es la que saca el /api.
     location /api/ {
