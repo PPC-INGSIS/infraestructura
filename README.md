@@ -6,8 +6,8 @@ No tiene código ni build. Son archivos de configuración.
 
 ## Estado
 
-- `docker-compose.yml`: levanta **Permisos**, **PrintScript** y **Snippets** (con sus bases), y el **asset-service** de la cátedra con su Azurite. Los demás servicios se agregan cuando tengan su imagen disponible.
-- `stack.yml` y `versiones.env`: lo que corre en las VMs (Docker Swarm). Se despliega con el workflow **Deploy** (ver [Despliegue a las VMs](#despliegue-a-las-vms)).
+- `docker-compose.yml`: levanta **Permisos**, **PrintScript** y **Snippets** (con sus bases), **Redis**, y el **asset-service** de la cátedra con su Azurite. Los demás servicios se agregan cuando tengan su imagen disponible.
+- `stack.yml` y `versiones.env`: lo que corre en las VMs (Docker Swarm). Es lo mismo que el compose, más la **UI**, **nginx** (la entrada, con HTTPS) y **certbot** (el certificado). Se despliega con el workflow **Deploy** (ver [Despliegue a las VMs](#despliegue-a-las-vms)).
 - Workflow **VMs**: funcionando. Enciende y apaga las VMs de dev y prod (ver [Encender y apagar las VMs](#encender-y-apagar-las-vms)).
 
 ## Por qué un repo aparte
@@ -20,16 +20,16 @@ Tiene que ser un solo archivo porque Docker Compose crea **una red por archivo**
 
 | Servicio | Qué es | De quién |
 |---|---|---|
-| UI | La interfaz web: es lo que usa el usuario y le habla a Snippets | La cátedra |
+| UI | La interfaz web: es lo que usa el usuario y le habla a Snippets | Nosotros (fork del repo de la cátedra) |
 | Snippets | Puerta de entrada de todo lo que es snippet | Nosotros |
 | Permisos | Quién puede ver o editar qué | Nosotros |
 | PrintScript | Valida, formatea, lintea y ejecuta | Nosotros |
 | Snippet Store | Guarda y lee el código de los snippets | La cátedra |
 | Una base Postgres por servicio propio | Cada servicio es dueño de sus datos | — |
 | Redis | Cola de trabajos asincrónicos de Snippets | Nosotros |
+| nginx | La puerta de entrada en las VMs: HTTPS, `/` va a la UI y `/api/` a Snippets | Nosotros |
 
-Todavía no se sabe cómo entrega la cátedra la UI (imagen lista o código para construir), así que no tiene puerto asignado. Se define cuando la tengamos.
-
+La UI y nginx corren solo en las VMs, no en el `docker-compose.yml`. Para trabajar en la UI en tu máquina se usa el servidor de desarrollo, como explica el README de `printscript-ui` (`npm run dev`).
 
 ## Requisitos
 
@@ -85,21 +85,29 @@ cp .env.example .env
 - `.env.example` sí se sube: documenta qué variables existen.
 - Los `*_TAG` (por ejemplo `PERMISSIONS_TAG`) son el SHA del commit de la imagen publicada. Se copia de la página del paquete en GitHub. Esto es solo para el compose local: los tags que corren en las VMs están en `versiones.env`.
 
-
 ## Cómo agregar un servicio
 
 1. Copiar la plantilla que está comentada en `docker-compose.yml`.
 2. Usar el puerto que le corresponde en la tabla de arriba.
 3. Si necesita variables propias, agregarlas a `.env.example` con un valor por defecto.
 
+Para que además corra en las VMs:
+
+4. Agregarlo a `stack.yml` (sin `ports`) y su `<SERVICIO>_TAG` a `versiones.env`, con el SHA de una imagen ya publicada. El bot solo actualiza variables que ya existen.
+5. En el repo del servicio, sumar el job `update-infra` a su `publish.yml` con su `tag-var`. Ojo de no copiar el `tag-var` de otro servicio.
+6. En la organización, darle acceso al repo del servicio al secret `INFRA_APP_PRIVATE_KEY` y a la variable `INFRA_APP_CLIENT_ID`.
+
 ## Despliegue a las VMs
 
-Las VMs corren un Docker Swarm de un solo nodo con el `stack.yml`: los mismos servicios del compose, pero sin puertos publicados y con la sección `deploy:` de Swarm. El stack es el mismo archivo en dev y en prod; lo que cambia entre ambientes es la versión de cada imagen, que sale de la rama.
+Las VMs corren un Docker Swarm de un solo nodo con el `stack.yml`: los mismos servicios del compose más la UI, nginx y certbot, sin puertos publicados salvo nginx (80 y 443), y con la sección `deploy:` de Swarm. El stack es el mismo archivo en dev y en prod; lo que cambia entre ambientes es la versión de cada imagen, que sale de la rama, y el dominio.
 
 | Archivo | Para qué |
 |---|---|
-| `stack.yml` | Los servicios tal como corren en las VMs. Las imágenes que no construimos (`asset-service`, `azurite` y `postgres`) están fijadas por digest, así que solo cambian si alguien cambia este archivo en un PR |
+| `stack.yml` | Los servicios tal como corren en las VMs. Las imágenes que no construimos (`asset-service`, `azurite`, `postgres`, `redis`, `nginx` y `certbot`) están fijadas por digest, así que solo cambian si alguien cambia este archivo en un PR |
 | `versiones.env` | El SHA de la imagen de cada servicio. Se llama igual en `dev` y en `main` |
+| `nginx/default.conf.template` | La config de nginx (ver [Entrada: nginx y HTTPS](#entrada-nginx-y-https)) |
+| `nginx/40-certificado.sh` | Hace que nginx espere el certificado al arrancar y se recargue cuando cambia |
+| `certbot/certbot.sh` | Consigue el certificado y lo renueva |
 | `.github/workflows/deploy.yml` | Despliega el stack en la VM del entorno |
 
 ### Cómo llega el código a una VM
@@ -112,15 +120,64 @@ Este repo usa gitflow, igual que los servicios: `dev` es el entorno dev y `main`
 - La rama decide el entorno: lo que cambia en `main` se despliega a prod y lo que cambia en `dev` se despliega a dev. El workflow no deja desplegar prod desde otra rama.
 - `versiones.env` lo escribe el bot. No se edita a mano, salvo para arreglar algo.
 
+### Reglas de las ramas
+
+`dev` y `main` tienen reglas (Settings → Rules → Rulesets):
+
+- Todo entra por PR: no se puede hacer push directo. No hace falta aprobación.
+- No se pueden borrar ni hacer force push.
+- En `dev`, el bot es la excepción: hace push directo de `versiones.env`, sin PR.
+
+GitHub propone `main` como base de los PRs. Antes de crear uno, cambiar la base a `dev`.
+
 ### Cómo se despliega
 
-El workflow **Deploy** corre cuando cambia `versiones.env` o `stack.yml` en `dev` o en `main`. También se puede lanzar a mano: pestaña **Actions** → **Deploy** → **Run workflow**, eligiendo la rama del entorno (`dev` para dev, `main` para prod).
+El workflow **Deploy** corre cuando cambia `versiones.env`, `stack.yml`, algo en `nginx/` o algo en `certbot/`, en `dev` o en `main`. También se puede lanzar a mano: pestaña **Actions** → **Deploy** → **Run workflow**, eligiendo la rama del entorno (`dev` para dev, `main` para prod).
 
 1. El runner de GitHub se conecta por SSH al Docker de la VM del entorno. Las claves y el host están en los Environments `dev` y `prod` del repo.
 2. Corre `docker stack deploy` con los tags de `versiones.env`. Swarm recrea solo los servicios cuya definición cambió.
 3. Espera hasta 5 minutos a que todos los servicios estén en N/N, y al final imprime el estado de cada tarea con su edad.
 
+Cómo leer ese estado: un servicio que el deploy no tocó conserva la edad de su tarea. Si una tarea anterior terminó en `Shutdown`, la reemplazó un deploy; si terminó en `Failed`, se cayó (es normal al prender la VM, mientras los servicios se esperan entre sí).
+
 Con la VM apagada el deploy falla en el paso **Verificar que la VM responde**. Se prende con el workflow **VMs** y se vuelve a correr (**Re-run jobs**) sobre el run más reciente: un re-run usa el commit de ese run, así que uno viejo desplegaría versiones viejas.
+
+### Volver a una versión anterior (rollback)
+
+Lo que corre en la VM es lo que dice `versiones.env`. Para volver atrás un servicio, se revierte en git el commit que le cambió el tag:
+
+```bash
+git checkout dev && git pull
+git checkout -b revert/<servicio>
+git revert <SHA del commit del bot>
+git push -u origin revert/<servicio>
+```
+
+Y un PR a `dev`. Al mergearlo, el deploy vuelve a la imagen anterior (la misma, con el mismo digest) y solo reemplaza ese servicio. El próximo merge del servicio vuelve a subir el tag con el bot.
+
+No usar `docker service rollback` en la VM: la VM quedaría distinta de `versiones.env`, y el próximo deploy de cualquier servicio volvería a poner la imagen de git.
+
+## Entrada: nginx y HTTPS
+
+En cada VM, nginx es el único servicio que se ve desde afuera.
+
+| Entorno | Dirección |
+|---|---|
+| dev | `https://ppc-snippets-dev.duckdns.org` |
+| prod | `https://ppc-snippets-prod.duckdns.org` |
+
+El dominio de cada uno es la variable `DOMINIO` del Environment del repo, y la config de nginx es una plantilla que lo completa al arrancar.
+
+- **443 (HTTPS)**: acá termina TLS. `/api/...` va a Snippets sin el prefijo (`/api/snippets` llega como `/snippets`) y todo lo demás va a la UI. Hacia adentro sigue HTTP plano, por la red del stack.
+- **80 (HTTP)**: solo atiende el desafío de Let's Encrypt; todo lo demás se redirige a HTTPS.
+
+El certificado lo consigue y lo renueva el servicio **certbot**, solo:
+
+- En una VM nueva crea primero un certificado provisorio (autofirmado, de un día) para que nginx pueda arrancar, y después pide el real a Let's Encrypt.
+- Cada 12 horas intenta renovar; certbot solo renueva si faltan menos de 30 días para el vencimiento.
+- nginx revisa el certificado cada minuto y se recarga solo cuando cambia.
+
+El certificado vive en el volumen `letsencrypt` de la VM. No borrarlo: Let's Encrypt limita cuántos certificados se pueden pedir por semana para un mismo dominio.
 
 ## Encender y apagar las VMs
 
