@@ -1,9 +1,9 @@
 # Stack de Snippet Searcher para las VMs (Docker Swarm).
 # Para desarrollar en tu máquina se usa docker-compose.yml.
 #
-# Desde afuera solo se entra por nginx (puerto 80; el 443 llega con HTTPS): es el único
-# servicio con `ports`. Los demás no publican nada y se hablan por nombre dentro de la red
-# del stack. nginx también les llega por nombre, por esa misma red.
+# Desde afuera solo se entra por nginx (80 y 443): es el único servicio con `ports`. Los demás
+# no publican nada y se hablan por nombre dentro de la red del stack. nginx también les llega
+# por nombre, por esa misma red.
 #
 # OJO: en los mensajes de ${VAR:?mensaje} no usar guiones. `docker stack deploy` los
 # toma como valor por defecto y deploya una imagen con un tag equivocado, sin fallar.
