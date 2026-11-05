@@ -67,6 +67,8 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://snippets-db:5432/${SNIPPETS_DB_NAME:-snippets}
       POSTGRES_USER: ${SNIPPETS_DB_USER:-snippets}
       PRINTSCRIPT_URL: http://printscript:8080
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
       SPRING_CONFIG_IMPORT: optional:configtree:/run/secrets/
     secrets:
       - source: snippets_db_password
@@ -96,6 +98,22 @@ services:
       replicas: 1
       update_config:
         # Nunca dos bases sobre los mismos datos: apaga la vieja antes de arrancar la nueva
+        order: stop-first
+
+  redis:
+    image: redis:7.4-alpine@sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy:
+      replicas: 1
+      update_config:
+        # Guarda la cola: nunca dos instancias sobre los mismos datos
         order: stop-first
 
   asset-service:
@@ -193,6 +211,7 @@ secrets:
 volumes:
   permissions-db-data:
   snippets-db-data:
+  redis-data:
   azurite-data:
   certbot-www:
   letsencrypt:

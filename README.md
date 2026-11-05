@@ -26,6 +26,7 @@ Tiene que ser un solo archivo porque Docker Compose crea **una red por archivo**
 | PrintScript | Valida, formatea, lintea y ejecuta | Nosotros |
 | Snippet Store | Guarda y lee el código de los snippets | La cátedra |
 | Una base Postgres por servicio propio | Cada servicio es dueño de sus datos | — |
+| Redis | Cola de trabajos asincrónicos de Snippets | Nosotros |
 
 Todavía no se sabe cómo entrega la cátedra la UI (imagen lista o código para construir), así que no tiene puerto asignado. Se define cuando la tengamos.
 
@@ -68,6 +69,7 @@ Reservados para que los servicios no choquen entre sí en una misma máquina. To
 | Postgres de Snippets | 5433 |
 | Postgres de Permisos | 5434 |
 | Postgres de PrintScript | 5435 |
+| Redis | 6379 |
 
 Estos puertos son solo para entrar **desde tu máquina**. Entre contenedores no se usan: cada servicio le habla a otro por su nombre y su puerto interno, por ejemplo `http://printscript:8080`.
 
