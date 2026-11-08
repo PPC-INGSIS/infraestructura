@@ -55,6 +55,8 @@ services:
       PRINTSCRIPT_URL: http://printscript:8080
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      AUTH0_DOMAIN: ${AUTH0_DOMAIN:?falta-definir-AUTH0_DOMAIN-en-el-.env}
+      AUTH0_AUDIENCE: ${AUTH0_AUDIENCE:?falta-definir-AUTH0_AUDIENCE-en-el-.env}
     depends_on:
       snippets-db:
         condition: service_healthy

@@ -107,6 +107,9 @@ jobs:
           DOCKER_CONTEXT: vm
           # Dominio de este ambiente (variable del GitHub Environment): lo usa nginx
           DOMINIO: ${{ vars.DOMINIO }}
+          # Auth0 de este ambiente (variables del GitHub Environment): las usa Snippets
+          AUTH0_DOMAIN: ${{ vars.AUTH0_DOMAIN }}
+          AUTH0_AUDIENCE: ${{ vars.AUTH0_AUDIENCE }}
         run: |
           set -euo pipefail
 
