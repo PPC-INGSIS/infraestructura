@@ -70,6 +70,9 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       SPRING_CONFIG_IMPORT: optional:configtree:/run/secrets/
+      # Auth0: quién emite los tokens y para qué API (variables del GitHub Environment)
+      AUTH0_DOMAIN: ${AUTH0_DOMAIN:?falta_definir_AUTH0_DOMAIN}
+      AUTH0_AUDIENCE: ${AUTH0_AUDIENCE:?falta_definir_AUTH0_AUDIENCE}
     secrets:
       - source: snippets_db_password
         target: POSTGRES_PASSWORD

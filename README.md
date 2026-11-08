@@ -84,6 +84,7 @@ cp .env.example .env
 - `.env` está en el `.gitignore`: es de cada máquina y nunca se sube.
 - `.env.example` sí se sube: documenta qué variables existen.
 - Los `*_TAG` (por ejemplo `PERMISSIONS_TAG`) son el SHA del commit de la imagen publicada. Se copia de la página del paquete en GitHub. Esto es solo para el compose local: los tags que corren en las VMs están en `versiones.env`.
+- `AUTH0_DOMAIN` y `AUTH0_AUDIENCE` le dicen a Snippets qué tokens aceptar: de qué tenant de Auth0 y para qué API. Son públicos y todo el equipo usa el mismo tenant, así que el `.env.example` ya trae los valores reales.
 
 ## Cómo agregar un servicio
 
@@ -134,7 +135,7 @@ GitHub propone `main` como base de los PRs. Antes de crear uno, cambiar la base 
 
 El workflow **Deploy** corre cuando cambia `versiones.env`, `stack.yml`, algo en `nginx/` o algo en `certbot/`, en `dev` o en `main`. También se puede lanzar a mano: pestaña **Actions** → **Deploy** → **Run workflow**, eligiendo la rama del entorno (`dev` para dev, `main` para prod).
 
-1. El runner de GitHub se conecta por SSH al Docker de la VM del entorno. Las claves y el host están en los Environments `dev` y `prod` del repo.
+1. El runner de GitHub se conecta por SSH al Docker de la VM del entorno. Las claves y el host están en los Environments `dev` y `prod` del repo, junto con las variables que se pasan al stack: `DOMINIO` (nginx) y `AUTH0_DOMAIN` y `AUTH0_AUDIENCE` (Snippets). Si falta alguna, el deploy corta con `falta_definir_<VARIABLE>`.
 2. Corre `docker stack deploy` con los tags de `versiones.env`. Swarm recrea solo los servicios cuya definición cambió.
 3. Espera hasta 5 minutos a que todos los servicios estén en N/N, y al final imprime el estado de cada tarea con su edad.
 
