@@ -49,7 +49,7 @@ services:
       # New Relic: apagado salvo que pongas tu key en el .env (ver .env.example)
       NEW_RELIC_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY:-}
       NEW_RELIC_AGENT_ENABLED: ${NEW_RELIC_AGENT_ENABLED:-false}
-      NEW_RELIC_APP_NAME: permissions-local
+      NEW_RELIC_APP_NAME: printscript-local
 
   snippets:
     image: ghcr.io/ppc-ingsis/snippet-service:${SNIPPETS_TAG:?falta-definir-SNIPPETS_TAG-en-el-.env}
@@ -68,7 +68,7 @@ services:
       # New Relic: apagado salvo que pongas tu key en el .env (ver .env.example)
       NEW_RELIC_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY:-}
       NEW_RELIC_AGENT_ENABLED: ${NEW_RELIC_AGENT_ENABLED:-false}
-      NEW_RELIC_APP_NAME: permissions-local
+      NEW_RELIC_APP_NAME: snippets-local
     depends_on:
       snippets-db:
         condition: service_healthy

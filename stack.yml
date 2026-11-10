@@ -63,7 +63,7 @@ services:
     environment:
       SERVER_PORT: 8080
       NEW_RELIC_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY:?falta_definir_NEW_RELIC_LICENSE_KEY}
-      NEW_RELIC_APP_NAME: permissions-${ENTORNO:?falta_definir_ENTORNO}
+      NEW_RELIC_APP_NAME: printscript-${ENTORNO:?falta_definir_ENTORNO}
     deploy:
       replicas: 1
       update_config:
@@ -83,7 +83,7 @@ services:
       AUTH0_DOMAIN: ${AUTH0_DOMAIN:?falta_definir_AUTH0_DOMAIN}
       AUTH0_AUDIENCE: ${AUTH0_AUDIENCE:?falta_definir_AUTH0_AUDIENCE}
       NEW_RELIC_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY:?falta_definir_NEW_RELIC_LICENSE_KEY}
-      NEW_RELIC_APP_NAME: permissions-${ENTORNO:?falta_definir_ENTORNO}
+      NEW_RELIC_APP_NAME: snippets-${ENTORNO:?falta_definir_ENTORNO}
     secrets:
       - source: snippets_db_password
         target: POSTGRES_PASSWORD
