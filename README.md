@@ -167,6 +167,24 @@ Cada servicio manda sus datos a la cuenta de New Relic del equipo con el nombre 
 - Llega a los servicios como variable de entorno y no como secret de Swarm: el agente de Java arranca antes que Spring y no lee `/run/secrets/`.
 - Las variables están en todos los servicios de Spring, pero solo hacen algo en los que traen el agente en su imagen (por ahora, `asset-service`).
 
+#### Cómo llegan los datos: el agente de Java
+
+Usamos el agente de Java de New Relic (`-javaagent`), el mismo que trae el asset service de la cátedra, y no OpenTelemetry:
+
+- No hay que cambiar código: el agente se engancha en la JVM al arrancar e instrumenta Tomcat, Spring MVC, los clientes HTTP, JDBC y Redis.
+- Propaga el trace id solo: un pedido que entra a Snippets y llama a PrintScript queda en una sola traza.
+- Manda los logs de la app a New Relic sin un recolector aparte (`application_logging.forwarding` en `newrelic.yml`).
+- OpenTelemetry no nos ata a un proveedor, pero suma un collector y más configuración. Como la cuenta ya es de New Relic, no compensa.
+
+Lo probamos el 10/11 con el agente 9.5.0 en Snippets y PrintScript (Spring Boot 4.1.1, Java 21), en local: los pedidos aparecen con el nombre del controller y la traza de crear un snippet tiene a los dos servicios con el mismo trace id.
+
+Para sumarlo a un servicio, igual que el asset service:
+
+1. Bajar el jar del agente en el build (una configuración de Gradle aparte, fuera del classpath) y copiarlo a la imagen junto con un `newrelic.yml`.
+2. Arrancar con `-javaagent:/app/newrelic.jar`. En PrintScript, sumarlo a su `JAVA_TOOL_OPTIONS` sin pisar `-XX:MaxRAMPercentage=75`.
+3. Lo secreto y lo que cambia por entorno va por variables `NEW_RELIC_*`, que ya están en `stack.yml`.
+
+Para probar en local con el compose, usar `127.0.0.1` y no `localhost`: si hay un servicio corriendo desde el IDE en el mismo puerto, `localhost` puede ir a ese por IPv6.
 ## Entrada: nginx y HTTPS
 
 En cada VM, nginx es el único servicio que se ve desde afuera.
