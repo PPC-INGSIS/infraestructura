@@ -110,6 +110,9 @@ jobs:
           # Auth0 de este ambiente (variables del GitHub Environment): las usa Snippets
           AUTH0_DOMAIN: ${{ vars.AUTH0_DOMAIN }}
           AUTH0_AUDIENCE: ${{ vars.AUTH0_AUDIENCE }}
+          # New Relic de este ambiente (secret del GitHub Environment, una key por ambiente).
+          # El nombre de cada app usa ENTORNO, definido arriba para todo el workflow.
+          NEW_RELIC_LICENSE_KEY: ${{ secrets.NEW_RELIC_LICENSE_KEY }}
         run: |
           set -euo pipefail
 

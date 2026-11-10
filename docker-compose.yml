@@ -15,6 +15,10 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://permissions-db:5432/${PERMISSIONS_DB_NAME:-permissions}
       POSTGRES_USER: ${PERMISSIONS_DB_USER:-permissions}
       POSTGRES_PASSWORD: ${PERMISSIONS_DB_PASSWORD:-permissions}
+      # New Relic: apagado salvo que pongas tu key en el .env (ver .env.example)
+      NEW_RELIC_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY:-}
+      NEW_RELIC_AGENT_ENABLED: ${NEW_RELIC_AGENT_ENABLED:-false}
+      NEW_RELIC_APP_NAME: permissions-local
     depends_on:
       permissions-db:
         condition: service_healthy
@@ -42,6 +46,10 @@ services:
     environment:
       # En desarrollo local (bootRun) escucha en 8082; acá escucha en 8080 como el resto
       SERVER_PORT: 8080
+      # New Relic: apagado salvo que pongas tu key en el .env (ver .env.example)
+      NEW_RELIC_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY:-}
+      NEW_RELIC_AGENT_ENABLED: ${NEW_RELIC_AGENT_ENABLED:-false}
+      NEW_RELIC_APP_NAME: permissions-local
 
   snippets:
     image: ghcr.io/ppc-ingsis/snippet-service:${SNIPPETS_TAG:?falta-definir-SNIPPETS_TAG-en-el-.env}
@@ -57,6 +65,10 @@ services:
       REDIS_PORT: 6379
       AUTH0_DOMAIN: ${AUTH0_DOMAIN:?falta-definir-AUTH0_DOMAIN-en-el-.env}
       AUTH0_AUDIENCE: ${AUTH0_AUDIENCE:?falta-definir-AUTH0_AUDIENCE-en-el-.env}
+      # New Relic: apagado salvo que pongas tu key en el .env (ver .env.example)
+      NEW_RELIC_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY:-}
+      NEW_RELIC_AGENT_ENABLED: ${NEW_RELIC_AGENT_ENABLED:-false}
+      NEW_RELIC_APP_NAME: permissions-local
     depends_on:
       snippets-db:
         condition: service_healthy
@@ -101,8 +113,10 @@ services:
       - "127.0.0.1:8083:8080" # solo desde esta máquina
     environment:
       AZURE_HOST: http://azurite
-      # El entrypoint carga el agente de New Relic; sin licencia, se apaga
-      NEW_RELIC_AGENT_ENABLED: "false"
+      # New Relic: apagado salvo que pongas tu key en el .env (ver .env.example)
+      NEW_RELIC_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY:-}
+      NEW_RELIC_AGENT_ENABLED: ${NEW_RELIC_AGENT_ENABLED:-false}
+      NEW_RELIC_APP_NAME: asset-service-local
     depends_on:
       azurite:
         condition: service_started

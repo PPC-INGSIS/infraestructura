@@ -10,6 +10,11 @@
 #
 # Las contraseñas de las bases son secrets de Swarm, creados a mano en cada VM antes del
 # primer deploy:  docker secret create <nombre> -
+#
+# New Relic: NEW_RELIC_LICENSE_KEY es un secret del GitHub Environment y llega como variable de
+# entorno, no como secret de Swarm: el agente arranca antes que Spring y no lee /run/secrets/.
+# NEW_RELIC_APP_NAME lleva el ambiente (ENTORNO, lo define deploy.yml) para no mezclar dev y prod.
+# En los servicios que todavía no traen el agente en la imagen, estas variables no hacen nada.
 
 services:
   permissions:
@@ -21,6 +26,8 @@ services:
       # Spring lee cada archivo de /run/secrets/ como una propiedad con el nombre del archivo:
       # así ${POSTGRES_PASSWORD} del application.properties sale del secret
       SPRING_CONFIG_IMPORT: optional:configtree:/run/secrets/
+      NEW_RELIC_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY:?falta_definir_NEW_RELIC_LICENSE_KEY}
+      NEW_RELIC_APP_NAME: permissions-${ENTORNO:?falta_definir_ENTORNO}
     secrets:
       - source: permissions_db_password
         target: POSTGRES_PASSWORD
@@ -55,6 +62,8 @@ services:
     image: ghcr.io/ppc-ingsis/printscript-service:${PRINTSCRIPT_TAG:?falta_definir_PRINTSCRIPT_TAG}
     environment:
       SERVER_PORT: 8080
+      NEW_RELIC_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY:?falta_definir_NEW_RELIC_LICENSE_KEY}
+      NEW_RELIC_APP_NAME: permissions-${ENTORNO:?falta_definir_ENTORNO}
     deploy:
       replicas: 1
       update_config:
@@ -73,6 +82,8 @@ services:
       # Auth0: quién emite los tokens y para qué API (variables del GitHub Environment)
       AUTH0_DOMAIN: ${AUTH0_DOMAIN:?falta_definir_AUTH0_DOMAIN}
       AUTH0_AUDIENCE: ${AUTH0_AUDIENCE:?falta_definir_AUTH0_AUDIENCE}
+      NEW_RELIC_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY:?falta_definir_NEW_RELIC_LICENSE_KEY}
+      NEW_RELIC_APP_NAME: permissions-${ENTORNO:?falta_definir_ENTORNO}
     secrets:
       - source: snippets_db_password
         target: POSTGRES_PASSWORD
@@ -124,8 +135,9 @@ services:
     image: ghcr.io/austral-ingsis/snippet-asset-service:latest@sha256:eacad54bf95717c5483619ad1fe45a9b4a0012a37b451c37baf13e6f43200656
     environment:
       AZURE_HOST: http://azurite
-      # El entrypoint carga el agente de New Relic; sin licencia, se apaga
-      NEW_RELIC_AGENT_ENABLED: "false"
+      # La imagen de la cátedra ya trae el agente de New Relic: con la key, manda datos
+      NEW_RELIC_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY:?falta_definir_NEW_RELIC_LICENSE_KEY}
+      NEW_RELIC_APP_NAME: asset-service-${ENTORNO:?falta_definir_ENTORNO}
     deploy:
       replicas: 1
       update_config:
