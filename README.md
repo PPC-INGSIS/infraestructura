@@ -198,7 +198,7 @@ Todo el equipo usa un solo tenant de Auth0 (`dev-m32ysp7h6y2qyjn0`, región US) 
 | Action `Rol snippet-user al primer login` | Trigger Post Login. Le asigna `snippet-user` a cada usuario nuevo (ver abajo) |
 | App `Asignar rol automático (Action)` | Machine to Machine, autorizada en la Management API solo con `create:role_members`. La usa la Action; sus credenciales están en los secrets de la Action, no en GitHub |
 | App `Snippets (M2M)` | Machine to Machine, autorizada en la Management API solo con `read:users`. Es para listar usuarios al compartir un snippet (PPC-INGSIS/snippet-service#29) |
-| Duración del token de la API | 24 h (el valor por defecto) |
+| Duración del token de la API | 1 h (3600 s), acordada con el equipo. Para bajarla a 15 min, primero la UI tiene que renovar el token con refresh tokens |
 
 Cada app M2M tiene solo el permiso que usa: si se filtra el secreto de Snippets, se pueden leer usuarios, pero no asignar roles.
 
