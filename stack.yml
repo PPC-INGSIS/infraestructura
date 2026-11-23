@@ -82,6 +82,9 @@ services:
       # Auth0: quién emite los tokens y para qué API (variables del GitHub Environment)
       AUTH0_DOMAIN: ${AUTH0_DOMAIN:?falta_definir_AUTH0_DOMAIN}
       AUTH0_AUDIENCE: ${AUTH0_AUDIENCE:?falta_definir_AUTH0_AUDIENCE}
+      # Management API de Auth0, para listar usuarios al compartir (app M2M "Snippets (M2M)")
+      AUTH0_MANAGEMENT_CLIENT_ID: ${AUTH0_MANAGEMENT_CLIENT_ID:?falta_definir_AUTH0_MANAGEMENT_CLIENT_ID}
+      AUTH0_MANAGEMENT_CLIENT_SECRET: ${AUTH0_MANAGEMENT_CLIENT_SECRET:?falta_definir_AUTH0_MANAGEMENT_CLIENT_SECRET}
       NEW_RELIC_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY:?falta_definir_NEW_RELIC_LICENSE_KEY}
       NEW_RELIC_APP_NAME: snippets-${ENTORNO:?falta_definir_ENTORNO}
     secrets:

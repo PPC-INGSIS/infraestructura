@@ -136,7 +136,7 @@ GitHub propone `main` como base de los PRs. Antes de crear uno, cambiar la base 
 
 El workflow **Deploy** corre cuando cambia `versiones.env`, `stack.yml`, algo en `nginx/` o algo en `certbot/`, en `dev` o en `main`. También se puede lanzar a mano: pestaña **Actions** → **Deploy** → **Run workflow**, eligiendo la rama del entorno (`dev` para dev, `main` para prod).
 
-1. El runner de GitHub se conecta por SSH al Docker de la VM del entorno. Las claves y el host están en los Environments `dev` y `prod` del repo, junto con lo que se pasa al stack: las variables `DOMINIO` (nginx) y `AUTH0_DOMAIN` y `AUTH0_AUDIENCE` (Snippets), y el secret `NEW_RELIC_LICENSE_KEY` (ver [New Relic](#new-relic)). Si falta alguno, el deploy corta con `falta_definir_<VARIABLE>`.
+1. El runner de GitHub se conecta por SSH al Docker de la VM del entorno. Las claves y el host están en los Environments `dev` y `prod` del repo, junto con lo que se pasa al stack: las variables `DOMINIO` (nginx) y `AUTH0_DOMAIN`, `AUTH0_AUDIENCE` y `AUTH0_MANAGEMENT_CLIENT_ID` (Snippets), y los secrets `NEW_RELIC_LICENSE_KEY` (ver [New Relic](#new-relic)) y `AUTH0_MANAGEMENT_CLIENT_SECRET` (ver [Auth0](#auth0)). Si falta alguno, el deploy corta con `falta_definir_<VARIABLE>`.
 2. Corre `docker stack deploy` con los tags de `versiones.env`. Swarm recrea solo los servicios cuya definición cambió.
 3. Espera hasta 5 minutos a que todos los servicios estén en N/N, y al final imprime el estado de cada tarea con su edad.
 
@@ -212,7 +212,9 @@ La Action corre en cada login, pero solo actúa en el **primero** (`logins_count
 
 ### Credenciales de la Management API para Snippets
 
-Están en los Environments `dev` y `prod`: la variable `AUTH0_MANAGEMENT_CLIENT_ID` y el secret `AUTH0_MANAGEMENT_CLIENT_SECRET`. El dominio es el mismo `AUTH0_DOMAIN`. Todavía no se pasan al stack porque ningún servicio las usa: las suma a `stack.yml` y `deploy.yml` quien haga snippet-service#29.
+Están en los Environments `dev` y `prod`: la variable `AUTH0_MANAGEMENT_CLIENT_ID` y el secret `AUTH0_MANAGEMENT_CLIENT_SECRET`. El dominio es el mismo `AUTH0_DOMAIN`. Están en los Environments `dev` y `prod`: la variable `AUTH0_MANAGEMENT_CLIENT_ID` y el secret `AUTH0_MANAGEMENT_CLIENT_SECRET`. El dominio es el mismo `AUTH0_DOMAIN`. `deploy.yml` se las pasa al stack, y Snippets las usa en `GET /users` (snippet-service#29). Llegan como variables de entorno y no como secrets de Swarm, así se pueden rotar desde GitHub sin tocar la VM.
+
+En local son opcionales: sin ellas Snippets arranca, pero `GET /users` falla. Para probarlo, copiá los valores de `Snippets (M2M)` a tu `.env`.
 
 ## Entrada: nginx y HTTPS
 
