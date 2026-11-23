@@ -65,6 +65,9 @@ services:
       REDIS_PORT: 6379
       AUTH0_DOMAIN: ${AUTH0_DOMAIN:?falta-definir-AUTH0_DOMAIN-en-el-.env}
       AUTH0_AUDIENCE: ${AUTH0_AUDIENCE:?falta-definir-AUTH0_AUDIENCE-en-el-.env}
+      # Management API de Auth0: opcional en local. Sin esto Snippets arranca igual, pero GET /users falla
+      AUTH0_MANAGEMENT_CLIENT_ID: ${AUTH0_MANAGEMENT_CLIENT_ID:-}
+      AUTH0_MANAGEMENT_CLIENT_SECRET: ${AUTH0_MANAGEMENT_CLIENT_SECRET:-}
       # New Relic: apagado salvo que pongas tu key en el .env (ver .env.example)
       NEW_RELIC_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY:-}
       NEW_RELIC_AGENT_ENABLED: ${NEW_RELIC_AGENT_ENABLED:-false}
