@@ -43,6 +43,10 @@ server {
     location /api/ {
         proxy_pass http://snippets:8080/;
         proxy_set_header Host $host;
+        # Cómo era el pedido afuera, para que Snippets arme sus URLs con https y /api.
+        # proxy_set_header pisa lo que mande el cliente: un X-Forwarded-* falso no llega a Snippets.
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Prefix /api;
     }
 
     # Todo lo demás es la UI, servida por su propio nginx en el servicio ui.
