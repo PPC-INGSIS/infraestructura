@@ -28,6 +28,9 @@ services:
       SPRING_CONFIG_IMPORT: optional:configtree:/run/secrets/
       NEW_RELIC_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY:?falta_definir_NEW_RELIC_LICENSE_KEY}
       NEW_RELIC_APP_NAME: permissions-${ENTORNO:?falta_definir_ENTORNO}
+      # Auth0: Permisos también valida el token (presentación de Auth0, diap. 48)
+      AUTH0_DOMAIN: ${AUTH0_DOMAIN:?falta_definir_AUTH0_DOMAIN}
+      AUTH0_AUDIENCE: ${AUTH0_AUDIENCE:?falta_definir_AUTH0_AUDIENCE}
     secrets:
       - source: permissions_db_password
         target: POSTGRES_PASSWORD
