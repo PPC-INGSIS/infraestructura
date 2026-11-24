@@ -64,6 +64,9 @@ services:
       SERVER_PORT: 8080
       NEW_RELIC_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY:?falta_definir_NEW_RELIC_LICENSE_KEY}
       NEW_RELIC_APP_NAME: printscript-${ENTORNO:?falta_definir_ENTORNO}
+      # Auth0: PrintScript también valida el token (presentación de Auth0, diap. 48)
+      AUTH0_DOMAIN: ${AUTH0_DOMAIN:?falta_definir_AUTH0_DOMAIN}
+      AUTH0_AUDIENCE: ${AUTH0_AUDIENCE:?falta_definir_AUTH0_AUDIENCE}
     deploy:
       replicas: 1
       update_config:
