@@ -196,6 +196,43 @@ CPU, memoria y disco de cada VM llegan con el agente de infraestructura de New R
 - Usa la misma `NEW_RELIC_LICENSE_KEY` del Environment.
 - La pantalla de infraestructura de New Relic solo la ve el usuario *full platform*. Los usuarios *basic* pueden consultar las métricas con NRQL: `FROM SystemSample SELECT average(cpuPercent), average(memoryUsedPercent), average(diskUsedPercent) WHERE displayName = 'vm-snippet-dev' TIMESERIES`.
 
+#### Puntos de falla y SLO
+
+De acá salen el SLI, el synthetic y las alertas: primero se mira qué le importa al usuario y después qué se mide (diap. 34 de la clase de observabilidad). Recorrido de `POST /api/snippets`; "cómo me entero" es lo que había el 23/11: agente en PrintScript y en el asset service, agente de infraestructura en la VM y ninguna alerta.
+
+| # | Paso | Qué puede fallar | Cómo me entero | Propuesta |
+|---|---|---|---|---|
+| 1 | Navegador / UI | Error de JavaScript, la UI no carga | No me entero (lo ve el usuario) | Agente de navegador (infraestructura#49) |
+| 2 | DNS y certificado | DuckDNS apunta a otra IP; certbot no renueva | No me entero hasta que no carga | Synthetic (infraestructura#50) y alerta de vencimiento del certificado |
+| 3 | nginx | Config rota; no arranca si un upstream no existe (`host not found`, 10/11 y 22/11) | Deploy en rojo y SSH (`docker service ps`) | Synthetic; que nginx resuelva los nombres en cada pedido |
+| 4 | Auth0 | Token vencido u otro emisor (401 masivo); usuario sin rol (403); Auth0 caído | No me entero | 401/403 por minuto en Snippets, con alerta si se disparan |
+| 5 | Snippets | 500, lentitud, no arranca (sin base o sin Redis) | SSH (`docker service logs`) | Agente en Snippets (snippet-service#40): 5xx y p99. Acá se mide el SLI |
+| 6 | Base de Snippets | Caída, disco lleno, conexiones agotadas | SSH | Errores de base en la traza de Snippets; disco de la VM (fila 10) |
+| 7 | PrintScript | Caído o lento (crear depende de `POST /validate`); rechaza el token | New Relic, si alguien entra a mirar (`printscript-dev`) | Alerta de errores y p99 |
+| 8 | Permisos (con snippet-service#27) | Caído; el dueño no queda registrado | Todavía no está en el camino | Agente en Permisos; span en la traza de crear |
+| 9 | Asset service y Azurite (con snippet-service#22) | Caído; el contenido no se guarda | New Relic, si alguien entra a mirar (`asset-service-dev`) | Span en la traza de crear; alerta de errores |
+| 10 | La VM | Apagada, sin memoria, disco lleno | New Relic, si alguien entra a mirar (`vm-snippet-dev`) | Alertas de disco > 80 %, memoria > 90 % y host que no reporta |
+| 11 | Deploy | Publish falla (429 de Maven Central, 23/11); descarga de imagen colgada (10/11); el entorno queda con la versión vieja | Mirando GitHub Actions | Notificaciones de GitHub. No entra en el SLO |
+
+Redis no está en el camino de crear un snippet: lo usan el linteo y el formateo en segundo plano, y va en la tabla de ese flujo.
+
+**SLI:** porcentaje de `POST /snippets` que terminan bien en menos de 1 s, medido en Snippets (`Transaction` de New Relic).
+
+- Bien: 201, o 400 por código inválido.
+- Mal: 5xx, o más de 1 s.
+- Fuera de la cuenta: 401 y 403 (los cubre la alerta de la fila 4).
+
+**SLO:** 99 % en 30 días, medido en prod. El error budget es el 1 % de los pedidos: de cada 1000 creaciones, 10 pueden fallar.
+
+Este SLI no prueba que el snippet se pueda leer después: eso lo cubre el synthetic (crear, leer y borrar).
+
+Decisiones y por qué:
+
+- **1 s y 99 % son el punto de partida.** Se revisan con una semana de datos de Snippets. Es una sola VM y los deploys reinician servicios: mejor una meta que se cumpla y subirla después que bajarla.
+- **El 400 por código inválido es éxito.** El SLI mide si el sistema funciona, no si el código del usuario es válido. Si no, un usuario que se equivoca mucho gastaría el error budget sin que nada esté roto.
+- **Se mide en prod.** La VM de dev se apaga a propósito para ahorrar créditos, y eso no es una falla.
+- **Las alertas llegan por mail y a un canal de Discord solo para alertas.** El mail queda registrado; en un canal aparte no se pierden entre la charla del equipo. Falta verificar que New Relic pueda mandar a un webhook de Discord.
+
 ## Auth0
 
 Todo el equipo usa un solo tenant de Auth0 (`dev-m32ysp7h6y2qyjn0`, región US) para local, dev y prod. Los integrantes del equipo son miembros del tenant: entran al dashboard con su propia cuenta.
