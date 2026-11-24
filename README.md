@@ -186,6 +186,16 @@ Para sumarlo a un servicio, igual que el asset service:
 
 Para probar en local con el compose, usar `127.0.0.1` y no `localhost`: si hay un servicio corriendo desde el IDE en el mismo puerto, `localhost` puede ir a ese por IPv6.
 
+#### Las VMs: el agente de infraestructura
+
+CPU, memoria y disco de cada VM llegan con el agente de infraestructura de New Relic, que corre como contenedor (`monitoreo/compose.yml`). La VM aparece como `vm-snippet-dev` o `vm-snippet-prod`.
+
+- **Con Docker y sin instalar nada en la VM**, como sugirió el profe. Aparece en prod sola, con el primer deploy.
+- **No está en el stack**: el agente necesita `privileged` y `pid: host` para ver el host, y `docker stack deploy` no los soporta. Lo levanta `deploy.yml` con `docker compose`, después del stack. `docker compose` crea un contenedor común: si nada cambió, no lo toca; si la VM se reinicia, lo vuelve a levantar Docker.
+- **Tiene permisos de root sobre la VM** (`privileged` y el socket de Docker). Es la imagen oficial de New Relic, fijada por digest.
+- Usa la misma `NEW_RELIC_LICENSE_KEY` del Environment.
+- La pantalla de infraestructura de New Relic solo la ve el usuario *full platform*. Los usuarios *basic* pueden consultar las métricas con NRQL: `FROM SystemSample SELECT average(cpuPercent), average(memoryUsedPercent), average(diskUsedPercent) WHERE displayName = 'vm-snippet-dev' TIMESERIES`.
+
 ## Auth0
 
 Todo el equipo usa un solo tenant de Auth0 (`dev-m32ysp7h6y2qyjn0`, región US) para local, dev y prod. Los integrantes del equipo son miembros del tenant: entran al dashboard con su propia cuenta.
