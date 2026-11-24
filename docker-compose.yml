@@ -50,6 +50,9 @@ services:
       NEW_RELIC_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY:-}
       NEW_RELIC_AGENT_ENABLED: ${NEW_RELIC_AGENT_ENABLED:-false}
       NEW_RELIC_APP_NAME: printscript-local
+      # Auth0: PrintScript también valida el token (presentación de Auth0, diap. 48)
+      AUTH0_DOMAIN: ${AUTH0_DOMAIN:?falta-definir-AUTH0_DOMAIN-en-el-.env}
+      AUTH0_AUDIENCE: ${AUTH0_AUDIENCE:?falta-definir-AUTH0_AUDIENCE-en-el-.env}
 
   snippets:
     image: ghcr.io/ppc-ingsis/snippet-service:${SNIPPETS_TAG:?falta-definir-SNIPPETS_TAG-en-el-.env}
