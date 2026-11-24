@@ -1,0 +1,28 @@
+# Agente de infraestructura de New Relic: CPU, memoria y disco de la VM (infraestructura #48).
+# Va aparte del stack porque necesita privileged y pid: host, y docker stack deploy no los soporta.
+# Lo levanta deploy.yml con docker compose en la VM del entorno, después del stack. No es para local.
+name: monitoreo
+
+services:
+  newrelic-infra:
+    # Versión numerada más nueva publicada en Docker Hub (las 2.x de GitHub no tienen tag), fijada por digest
+    image: newrelic/infrastructure:1.81.0@sha256:9e297d37a7f014406a19e65af3bc1ccd5702160450f37ebe989bd102a9fc029c
+    # Sin estos permisos el agente no ve el host: la documentación de New Relic los pide todos
+    privileged: true
+    pid: host
+    network_mode: host
+    cap_add:
+      - SYS_PTRACE
+    # Ubuntu 24.04 usa cgroup v2: sin esto el agente no ve los contenedores
+    cgroup: host
+    volumes:
+      # El sistema de archivos del host, solo lectura: de acá saca el disco y los procesos
+      - /:/host:ro
+      # Para listar los contenedores. Ojo: con esto y privileged, el agente es root en la VM
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      NRIA_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY:?falta_definir_NEW_RELIC_LICENSE_KEY}
+      # Cómo aparece la VM en New Relic: vm-snippet-dev o vm-snippet-prod
+      NRIA_DISPLAY_NAME: vm-snippet-${ENTORNO:?falta_definir_ENTORNO}
+    # No es un servicio de Swarm: si la VM se reinicia, lo vuelve a levantar Docker
+    restart: unless-stopped

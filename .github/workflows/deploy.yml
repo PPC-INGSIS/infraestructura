@@ -6,7 +6,8 @@ name: Deploy
 #
 # El entorno sale de la rama (gitflow):
 # - dev: se despliega solo cuando cambia versiones.env, stack.yml, la config de nginx
-#   (nginx/) o el script de certbot (certbot/) en la rama dev.
+#   (nginx/), el script de certbot (certbot/) o el agente de New Relic de la VM (monitoreo/)
+#   en la rama dev.
 # - prod: lo mismo en main, o sea, cuando se mergea dev en main. Ese PR es el release.
 # - A mano (workflow_dispatch): prod solo desde main, y dev desde cualquier otra rama.
 # Las VMs se prenden a mano (workflow VMs); con la VM apagada este workflow falla en el
@@ -20,6 +21,7 @@ on:
       - stack.yml
       - nginx/**
       - certbot/**
+      - monitoreo/**
   workflow_dispatch:
     inputs:
       entorno:
@@ -138,6 +140,16 @@ jobs:
 
           # Espera hasta 5 minutos a que todo esté en N/N y sin actualizaciones en curso
           bash scripts/esperar-stack.sh "$STACK"
+
+      - name: Agente de infraestructura de New Relic
+        env:
+          DOCKER_CONTEXT: vm
+          NEW_RELIC_LICENSE_KEY: ${{ secrets.NEW_RELIC_LICENSE_KEY }}
+        run: |
+          # Fuera del stack: necesita privileged y pid: host, que docker stack deploy no soporta.
+          # docker compose crea un contenedor común en la VM; si nada cambió, no lo toca.
+          # Va después del stack: si falla, la app ya quedó desplegada.
+          docker compose -f monitoreo/compose.yml up -d --wait
 
       - name: Estado de las tareas
         env:
