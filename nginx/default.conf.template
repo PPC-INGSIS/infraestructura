@@ -6,6 +6,13 @@
 # No anunciar la versión de nginx en el header Server ni en las páginas de error.
 server_tokens off;
 
+# Para el WebSocket: si el pedido trae Upgrade, se reenvía "Connection: upgrade"; si no, "close".
+# Es la forma que recomienda la documentación de nginx (va acá porque map solo vale fuera de server).
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
 # HTTP (80): solo el desafío de Let's Encrypt. Todo lo demás se redirige a HTTPS.
 server {
     listen 80;
@@ -47,6 +54,31 @@ server {
         # proxy_set_header pisa lo que mande el cliente: un X-Forwarded-* falso no llega a Snippets.
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-Prefix /api;
+    }
+
+    # La ejecución interactiva: WebSocket entre el browser y Snippets (/api/snippets/{id}/execution).
+    # Es regex para que valga solo en esta ruta: nginx prueba las regex antes de quedarse con el prefijo
+    # /api/ de arriba, así que el resto de la API no cambia.
+    location ~ ^/api/snippets/[^/]+/execution$ {
+        # Con una location regex, proxy_pass no puede llevar ruta: el /api se saca con el rewrite
+        rewrite ^/api(/.*)$ $1 break;
+        proxy_pass http://snippets:8080;
+
+        # Upgrade y Connection son headers de un solo salto: nginx no los reenvía si no se le pide,
+        # y sin ellos Snippets ve un GET común y responde 400. El WebSocket necesita HTTP/1.1.
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Prefix /api;
+
+        # Por defecto nginx corta a los 60 s sin tráfico, lo mismo que PrintScript espera cada input
+        # (printscript.interactive.input-timeout). Más largo, para que el que corte sea PrintScript y el
+        # usuario vea su mensaje "No se recibió un input en 60 s" en vez de un corte sin explicación.
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
     }
 
     # Todo lo demás es la UI, servida por su propio nginx en el servicio ui.
