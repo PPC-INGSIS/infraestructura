@@ -67,6 +67,8 @@ services:
       POSTGRES_USER: ${SNIPPETS_DB_USER:-snippets}
       POSTGRES_PASSWORD: ${SNIPPETS_DB_PASSWORD:-snippets}
       PRINTSCRIPT_URL: http://printscript:8080
+      # La ejecución interactiva va por WebSocket: misma dirección, otro esquema
+      PRINTSCRIPT_WS_URL: ws://printscript:8080
       # El puerto es el de adentro del contenedor (8080), no el que se publica en esta máquina
       ASSET_SERVICE_URL: http://asset-service:8080
       PERMISSIONS_URL: http://permissions:8080
