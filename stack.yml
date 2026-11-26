@@ -82,6 +82,10 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://snippets-db:5432/${SNIPPETS_DB_NAME:-snippets}
       POSTGRES_USER: ${SNIPPETS_DB_USER:-snippets}
       PRINTSCRIPT_URL: http://printscript:8080
+      # Sin estas dos, la app usa sus defaults de localhost y apunta a su propio contenedor:
+      # guardar el contenido y registrar al dueño fallan, y crear un snippet responde 502
+      ASSET_SERVICE_URL: http://asset-service:8080
+      PERMISSIONS_URL: http://permissions:8080
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       SPRING_CONFIG_IMPORT: optional:configtree:/run/secrets/
