@@ -144,6 +144,36 @@ Cómo leer ese estado: un servicio que el deploy no tocó conserva la edad de su
 
 Con la VM apagada el deploy falla en el paso **Verificar que la VM responde**. Se prende con el workflow **VMs** y se vuelve a correr (**Re-run jobs**) sobre el run más reciente: un re-run usa el commit de ese run, así que uno viejo desplegaría versiones viejas.
 
+### Límites de memoria
+
+Cada servicio de `stack.yml` tiene un límite de memoria (`deploy.resources.limits.memory`). Sin límite, un servicio que crece sin control se come la memoria de todos, y la VM no tiene swap: cuando se llena, Linux mata procesos.
+
+Medido en la VM de dev el 26/11 (`free -h` y `docker stats --no-stream`), recién deployada y sin carga. Esos números son un piso: una JVM agranda su heap a medida que la usan.
+
+| Servicio | Uso medido | Límite |
+|---|---|---|
+| snippets | 589 MiB | 1 GiB |
+| permissions | 548 MiB | 1 GiB |
+| printscript | 466 MiB | 1 GiB |
+| asset-service | 704 MiB | 1 GiB |
+| azurite | 191 MiB | 384 MiB |
+| snippets-db | 102 MiB | 256 MiB |
+| permissions-db | 44 MiB | 256 MiB |
+| redis | 23 MiB | 128 MiB |
+| certbot | 35 MiB | 128 MiB |
+| nginx | 4 MiB | 64 MiB |
+| ui | 9 MiB | 64 MiB |
+| **Total** | **~2,7 GiB** | **~5,3 GiB** |
+
+La VM tiene 7,7 GiB. Los límites suman ~5,3 GiB porque los servicios con `order: start-first` arrancan el contenedor nuevo antes de apagar el viejo: durante un deploy puede haber una copia extra de un servicio de 1 GiB. Lo que sobra queda para el sistema, Docker y el agente de infraestructura de New Relic (`monitoreo/compose.yml`, fuera del stack).
+
+**Las JVMs y el límite.** La JVM calcula su heap máximo según la memoria que ve: por defecto, el 25 %. Sin límite ve toda la VM (~1,9 GiB de heap cada una); con 1 GiB de límite y el default, el heap bajaría a 256 MiB. Por eso las cuatro llevan `-XX:MaxRAMPercentage=75` (768 MiB de heap, y el resto para la memoria fuera del heap y el agente de New Relic):
+
+- snippets, permissions y asset-service: `JAVA_TOOL_OPTIONS` en `stack.yml`. Su agente de New Relic va en el comando de arranque de la imagen, así que la variable se suma y no lo pisa.
+- printscript: ya lo define su `Dockerfile` en `JAVA_TOOL_OPTIONS`, junto con el `-javaagent`. No se pone en el stack, porque lo reemplazaría y se perdería el agente.
+
+Si un servicio llega a su límite, Docker lo mata y Swarm lo reinicia: se ve en `docker service ps <servicio>` (una tarea en `Failed`). Antes de subir un límite, medir de nuevo con carga.
+
 ### Volver a una versión anterior (rollback)
 
 Lo que corre en la VM es lo que dice `versiones.env`. Para volver atrás un servicio, se revierte en git el commit que le cambió el tag:
