@@ -15,11 +15,18 @@
 # entorno, no como secret de Swarm: el agente arranca antes que Spring y no lee /run/secrets/.
 # NEW_RELIC_APP_NAME lleva el ambiente (ENTORNO, lo define deploy.yml) para no mezclar dev y prod.
 # En los servicios que todavía no traen el agente en la imagen, estas variables no hacen nada.
+#
+# Memoria: cada servicio tiene un límite (deploy.resources.limits.memory) y la suma deja margen
+# para el contenedor extra de un deploy con start-first. Las JVMs llevan -XX:MaxRAMPercentage=75:
+# sin eso, con el límite el heap máximo baja al 25 %. Valores y medición en el README (Límites de memoria).
 
 services:
   permissions:
     image: ghcr.io/ppc-ingsis/permissions-service:${PERMISSIONS_TAG:?falta_definir_PERMISSIONS_TAG}
     environment:
+      # Heap hasta el 75 % del límite; el resto queda para la JVM fuera del heap y el agente.
+      # Se suma al comando de la imagen, que trae el -javaagent: no lo pisa
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75
       SERVER_PORT: 8080
       SPRING_DATASOURCE_URL: jdbc:postgresql://permissions-db:5432/${PERMISSIONS_DB_NAME:-permissions}
       POSTGRES_USER: ${PERMISSIONS_DB_USER:-permissions}
@@ -36,6 +43,9 @@ services:
         target: POSTGRES_PASSWORD
     deploy:
       replicas: 1
+      resources:
+        limits:
+          memory: 1G
       update_config:
         # Arranca el contenedor nuevo antes de apagar el viejo, para no cortar el servicio
         order: start-first
@@ -57,6 +67,9 @@ services:
       retries: 10
     deploy:
       replicas: 1
+      resources:
+        limits:
+          memory: 256M
       update_config:
         # Nunca dos bases sobre los mismos datos: apaga la vieja antes de arrancar la nueva
         order: stop-first
@@ -67,11 +80,16 @@ services:
       SERVER_PORT: 8080
       NEW_RELIC_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY:?falta_definir_NEW_RELIC_LICENSE_KEY}
       NEW_RELIC_APP_NAME: printscript-${ENTORNO:?falta_definir_ENTORNO}
+      # Sin JAVA_TOOL_OPTIONS acá: el Dockerfile ya la define con MaxRAMPercentage=75 y el
+      # -javaagent, y una variable del stack la reemplazaría entera (se perdería el agente)
       # Auth0: PrintScript también valida el token (presentación de Auth0, diap. 48)
       AUTH0_DOMAIN: ${AUTH0_DOMAIN:?falta_definir_AUTH0_DOMAIN}
       AUTH0_AUDIENCE: ${AUTH0_AUDIENCE:?falta_definir_AUTH0_AUDIENCE}
     deploy:
       replicas: 1
+      resources:
+        limits:
+          memory: 1G
       update_config:
         # Arranca el contenedor nuevo antes de apagar el viejo, para no cortar el servicio
         order: start-first
@@ -79,6 +97,9 @@ services:
   snippets:
     image: ghcr.io/ppc-ingsis/snippet-service:${SNIPPETS_TAG:?falta_definir_SNIPPETS_TAG}
     environment:
+      # Heap hasta el 75 % del límite; el resto queda para la JVM fuera del heap y el agente.
+      # Se suma al comando de la imagen, que trae el -javaagent: no lo pisa
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75
       SPRING_DATASOURCE_URL: jdbc:postgresql://snippets-db:5432/${SNIPPETS_DB_NAME:-snippets}
       POSTGRES_USER: ${SNIPPETS_DB_USER:-snippets}
       PRINTSCRIPT_URL: http://printscript:8080
@@ -102,6 +123,9 @@ services:
         target: POSTGRES_PASSWORD
     deploy:
       replicas: 1
+      resources:
+        limits:
+          memory: 1G
       update_config:
         # Arranca el contenedor nuevo antes de apagar el viejo, para no cortar el servicio
         order: start-first
@@ -123,6 +147,9 @@ services:
       retries: 10
     deploy:
       replicas: 1
+      resources:
+        limits:
+          memory: 256M
       update_config:
         # Nunca dos bases sobre los mismos datos: apaga la vieja antes de arrancar la nueva
         order: stop-first
@@ -139,6 +166,9 @@ services:
       retries: 10
     deploy:
       replicas: 1
+      resources:
+        limits:
+          memory: 128M
       update_config:
         # Guarda la cola: nunca dos instancias sobre los mismos datos
         order: stop-first
@@ -147,12 +177,18 @@ services:
     # La cátedra publica solo `latest`, no hay un tag fijo para elegir
     image: ghcr.io/austral-ingsis/snippet-asset-service:latest@sha256:eacad54bf95717c5483619ad1fe45a9b4a0012a37b451c37baf13e6f43200656
     environment:
+      # Heap hasta el 75 % del límite; el resto queda para la JVM fuera del heap y el agente.
+      # Se suma al comando de la imagen, que trae el -javaagent: no lo pisa
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75
       AZURE_HOST: http://azurite
       # La imagen de la cátedra ya trae el agente de New Relic: con la key, manda datos
       NEW_RELIC_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY:?falta_definir_NEW_RELIC_LICENSE_KEY}
       NEW_RELIC_APP_NAME: asset-service-${ENTORNO:?falta_definir_ENTORNO}
     deploy:
       replicas: 1
+      resources:
+        limits:
+          memory: 1G
       update_config:
         # Arranca el contenedor nuevo antes de apagar el viejo, para no cortar el servicio
         order: start-first
@@ -163,6 +199,9 @@ services:
       - azurite-data:/data
     deploy:
       replicas: 1
+      resources:
+        limits:
+          memory: 384M
       update_config:
         # Guarda archivos: nunca dos instancias sobre los mismos datos
         order: stop-first
@@ -173,6 +212,9 @@ services:
     image: ghcr.io/ppc-ingsis/printscript-ui:${UI_TAG:?falta_definir_UI_TAG}
     deploy:
       replicas: 1
+      resources:
+        limits:
+          memory: 64M
       update_config:
         # Arranca el contenedor nuevo antes de apagar el viejo, para no cortar el servicio
         order: start-first
@@ -208,6 +250,9 @@ services:
       - letsencrypt:/etc/letsencrypt:ro
     deploy:
       replicas: 1
+      resources:
+        limits:
+          memory: 64M
       update_config:
         # Arranca el contenedor nuevo antes de apagar el viejo, para no cortar el servicio
         order: start-first
@@ -229,6 +274,9 @@ services:
       - letsencrypt:/etc/letsencrypt
     deploy:
       replicas: 1
+      resources:
+        limits:
+          memory: 128M
 
 secrets:
   permissions_db_password:
