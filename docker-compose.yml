@@ -62,11 +62,14 @@ services:
     ports:
       - "127.0.0.1:8080:8080" # solo desde esta máquina
     environment:
-      # La app trae localhost como host de la base y de PrintScript: acá se pisan con nombres de servicio
+      # La app trae localhost como host de la base y de los otros servicios: acá se pisan con nombres de servicio
       SPRING_DATASOURCE_URL: jdbc:postgresql://snippets-db:5432/${SNIPPETS_DB_NAME:-snippets}
       POSTGRES_USER: ${SNIPPETS_DB_USER:-snippets}
       POSTGRES_PASSWORD: ${SNIPPETS_DB_PASSWORD:-snippets}
       PRINTSCRIPT_URL: http://printscript:8080
+      # El puerto es el de adentro del contenedor (8080), no el que se publica en esta máquina
+      ASSET_SERVICE_URL: http://asset-service:8080
+      PERMISSIONS_URL: http://permissions:8080
       REDIS_HOST: redis
       REDIS_PORT: 6379
       AUTH0_DOMAIN: ${AUTH0_DOMAIN:?falta-definir-AUTH0_DOMAIN-en-el-.env}
@@ -82,6 +85,11 @@ services:
       snippets-db:
         condition: service_healthy
       printscript:
+        condition: service_started
+      # Sin healthcheck propio: solo se espera a que arranquen
+      permissions:
+        condition: service_started
+      asset-service:
         condition: service_started
       redis:
         condition: service_healthy
