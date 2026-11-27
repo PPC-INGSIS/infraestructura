@@ -18,7 +18,7 @@
 #
 # Memoria: cada servicio tiene un límite (deploy.resources.limits.memory) y la suma deja margen
 # para el contenedor extra de un deploy con start-first. Las JVMs llevan -XX:MaxRAMPercentage=75:
-# sin eso, con el límite el heap máximo baja al 25 %. Valores y medición en el README (Límites de memoria).
+# sin eso, con el límite el heap máximo baja al 25 %. Valores y medición en docs/despliegue.md (Límites de memoria).
 
 services:
   permissions:
