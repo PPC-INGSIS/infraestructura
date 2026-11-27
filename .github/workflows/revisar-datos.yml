@@ -77,16 +77,19 @@ jobs:
           echo "PERMISOS_DB=$permisos" >> "$GITHUB_ENV"
 
       # Las credenciales salen de las variables de entorno del propio contenedor: así el
-      # chequeo no las necesita ni cambia si alguien las rota
+      # chequeo no las necesita ni cambia si alguien las rota.
+      # ON_ERROR_STOP porque psql, leyendo el SQL por stdin, devuelve 0 aunque la consulta
+      # falle: sin esto, una tabla o columna que no existe deja el archivo vacío y el reporte
+      # dice "0 sin dueño" en vez de fallar
       - name: Leer los snippets y sus dueños registrados
         run: |
           docker --context vm exec -i "$SNIPPETS_DB" \
-            sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -F" "' > snippets.txt <<'SQL'
+            sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -F" "' > snippets.txt <<'SQL'
           SELECT id, owner_id FROM snippets ORDER BY id;
           SQL
 
           docker --context vm exec -i "$PERMISOS_DB" \
-            sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At' > duenos.txt <<'SQL'
+            sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At' > duenos.txt <<'SQL'
           SELECT snippet_id FROM snippet_permission WHERE role = 'OWNER' ORDER BY snippet_id;
           SQL
 
