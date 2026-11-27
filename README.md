@@ -242,7 +242,7 @@ De acá salen el SLI, el synthetic y las alertas: primero se mira qué le import
 | 7 | PrintScript | Caído o lento (crear depende de `POST /validate`); rechaza el token | New Relic, si alguien entra a mirar (`printscript-dev`) | Alerta de errores y p99 |
 | 8 | Permisos (con snippet-service#27) | Caído; el dueño no queda registrado | Todavía no está en el camino | Agente en Permisos; span en la traza de crear |
 | 9 | Asset service y Azurite (con snippet-service#22) | Caído; el contenido no se guarda | New Relic, si alguien entra a mirar (`asset-service-dev`) | Span en la traza de crear; alerta de errores |
-| 10 | La VM | Apagada, sin memoria, disco lleno (hasta el 27/11 crecía con cada deploy: ahora el deploy borra las imágenes que no se usan) | New Relic, si alguien entra a mirar (`vm-snippet-dev`) | Alertas de disco > 80 %, memoria > 90 % y host que no reporta |
+| 10 | La VM | Apagada, sin memoria, disco lleno (hasta el 27/11 crecía con cada deploy: ahora el deploy borra las imágenes que no se usan) | Alertas de New Relic: disco > 80 %, memoria > 90 % y VM que no reporta | Hecho (ver [Alertas](#alertas)) |
 | 11 | Deploy | Publish falla (429 de Maven Central, 23/11); descarga de imagen colgada (10/11); el entorno queda con la versión vieja | Mirando GitHub Actions | Notificaciones de GitHub. No entra en el SLO |
 
 Redis no está en el camino de crear un snippet: lo usan el linteo y el formateo en segundo plano, y va en la tabla de ese flujo.
@@ -324,8 +324,10 @@ La condición dice **qué** está mal y el workflow **a quién** avisar: para pr
 |---|---|---|---|
 | VM dev sin reportar (apagada o sin red) | `SELECT count(*) FROM SystemSample WHERE displayName = 'vm-snippet-dev'` | No llegan datos durante 5 minutos | Si nadie la apagó a propósito, prenderla con el workflow [VMs](#encender-y-apagar-las-vms) y mirar en Azure si hubo un problema |
 | Servicio dev sin responder | `SELECT count(*) FROM Transaction WHERE appName IN ('snippets-dev', 'permissions-dev', 'printscript-dev') FACET appName` | Un servicio no manda transacciones durante 5 minutos | En la VM, `docker service ps snippet-searcher_<servicio>` y `docker service logs snippet-searcher_<servicio>` |
+| VM dev con el disco arriba del 80 % | `SELECT max(diskUsedPercent) FROM SystemSample WHERE displayName = 'vm-snippet-dev'` | Pasa el 80 % durante 5 minutos | Mirar los dos `docker system df` del paso "Borrar imágenes que ya no se usan" del último deploy. Si son imágenes, correr el deploy a mano; si son volúmenes, ver qué creció en Postgres o Azurite |
+| VM dev con la memoria arriba del 90 % | `SELECT max(memoryUsedPercent) FROM SystemSample WHERE displayName = 'vm-snippet-dev'` | Pasa el 90 % durante 5 minutos | En el dashboard, desde cuándo sube. En la VM, `docker stats --no-stream` y `docker service ps snippet-searcher_<servicio>` para ver si alguno se reinicia por llegar a su [límite](#límites-de-memoria) |
 
-En las dos: ventana de 1 minuto, *Event flow*, delay de 2 minutos, sin umbral estático y con un umbral de **pérdida de señal** de 5 minutos que abre una alerta crítica, sin cerrar las demás abiertas. La descripción de cada condición dice qué hacer y quién es el dueño, y tiene un Runbook URL a este README.
+Las dos primeras: ventana de 1 minuto, *Event flow*, delay de 2 minutos, sin umbral estático y con un umbral de **pérdida de señal** de 5 minutos que abre una alerta crítica, sin cerrar las demás abiertas. Las de disco y memoria son al revés: ventana de 1 minuto, **umbral estático** crítico sostenido 5 minutos y sin pérdida de señal. La descripción de cada condición dice qué hacer y quién es el dueño, y tiene un Runbook URL a este README.
 
 Por qué así:
 
@@ -333,6 +335,10 @@ Por qué así:
 - **Las transacciones de los healthchecks son la señal de vida.** Swarm le pega a `/actuator/health/readiness` cada 10 s, así que un servicio vivo manda unas 6 transacciones por minuto aunque nadie lo use. Por eso cada servicio tiene que tener `HEALTHCHECK`: PrintScript entró a esta alerta cuando lo sumó (printscript-service#45).
 - **5 minutos.** Menos, y un corte de red de un minuto ya avisa. Si Swarm reinicia un contenedor caído, vuelve en segundos y no hay alerta: se arregló solo, no hay nada que hacer.
 - **`FACET appName`**: una sola condición para los tres servicios, con una señal por servicio. La tarjeta dice cuál se cayó.
+- **Disco y memoria sin pérdida de señal.** Con la VM apagada no llegan datos, y un umbral estático sin datos no dispara: el apagado ya lo avisa "VM dev sin reportar", así que estas dos no suman avisos cuando se apaga la VM.
+- **Disco al 80 %.** Es lo que proponía la fila 10 de [Puntos de falla](#puntos-de-falla-y-slo). El disco es de unos 30 GB: antes de que el deploy borrara las imágenes viejas subía un punto o dos por deploy (del 53 al 60 % en una tarde del 27/11) y la limpieza lo bajó al 27 %. El 80 % deja varios GB de margen para reaccionar.
+- **Memoria al 90 %.** Los límites de los servicios suman unos 5,3 GiB de 7,7 (alrededor del 69 %) y en reposo la VM está en un 33 %. Pasar el 90 % es que algo usa más de lo asignado, o algo de afuera del stack. Más bajo, avisaría en cada deploy, cuando el contenedor nuevo y el viejo conviven un rato (`order: start-first`).
+- **`max` y no `average`.** Si hay más de un disco, importa el más lleno. Los 5 minutos evitan avisar por un pico corto, como un deploy bajando imágenes antes de borrar las viejas.
 
 **El mensaje de Discord**
 
@@ -368,6 +374,7 @@ Discord rechaza un JSON que no tenga sus campos (`content` o `embeds`), así que
 |---|---|---|
 | VM sin reportar | Apagar la VM con el workflow VMs | Unos 6 minutos después; al prenderla, la de cierre |
 | Servicio sin responder | En la VM, `docker service scale snippet-searcher_printscript=0` | Unos 6 minutos después; con `=1`, la de cierre |
+| Disco y memoria | No se dispararon a propósito: llenar el disco o la memoria de la VM rompería el resto. Para probar el aviso, el workflow tiene *Test notification* | — |
 
 #### Dashboard
 
