@@ -139,6 +139,7 @@ El workflow **Deploy** corre cuando cambia `versiones.env`, `stack.yml`, algo en
 1. El runner de GitHub se conecta por SSH al Docker de la VM del entorno. Las claves y el host están en los Environments `dev` y `prod` del repo, junto con lo que se pasa al stack: las variables `DOMINIO` (nginx), `AUTH0_DOMAIN` y `AUTH0_AUDIENCE` (Snippets, PrintScript y Permisos) y `AUTH0_MANAGEMENT_CLIENT_ID` (Snippets), y los secrets `NEW_RELIC_LICENSE_KEY` (ver [New Relic](#new-relic)) y `AUTH0_MANAGEMENT_CLIENT_SECRET` (ver [Auth0](#auth0)). Si falta alguno, el deploy corta con `falta_definir_<VARIABLE>`.
 2. Corre `docker stack deploy` con los tags de `versiones.env`. Swarm recrea solo los servicios cuya definición cambió.
 3. Espera hasta 5 minutos a que todos los servicios estén en N/N, y al final imprime el estado de cada tarea con su edad.
+4. Borra las imágenes que ya no usa ningún contenedor. Sin esto, cada deploy dejaba las imágenes anteriores en la VM y el disco subía sin bajar nunca (se vio en el dashboard: un punto por deploy). El log muestra `docker system df` antes y después.
 
 Cómo leer ese estado: un servicio que el deploy no tocó conserva la edad de su tarea. Si una tarea anterior terminó en `Shutdown`, la reemplazó un deploy; si terminó en `Failed`, se cayó (es normal al prender la VM, mientras los servicios se esperan entre sí).
 
@@ -185,7 +186,7 @@ git revert <SHA del commit del bot>
 git push -u origin revert/<servicio>
 ```
 
-Y un PR a `dev`. Al mergearlo, el deploy vuelve a la imagen anterior (la misma, con el mismo digest) y solo reemplaza ese servicio. El próximo merge del servicio vuelve a subir el tag con el bot.
+Y un PR a `dev`. Al mergearlo, el deploy vuelve a la imagen anterior (la misma, con el mismo digest) y solo reemplaza ese servicio. Como cada deploy borra las imágenes que no se usan, la anterior ya no está en la VM: Swarm la vuelve a bajar de ghcr.io, así que el rollback tarda lo que tarda esa descarga. El próximo merge del servicio vuelve a subir el tag con el bot.
 
 No usar `docker service rollback` en la VM: la VM quedaría distinta de `versiones.env`, y el próximo deploy de cualquier servicio volvería a poner la imagen de git.
 
@@ -241,7 +242,7 @@ De acá salen el SLI, el synthetic y las alertas: primero se mira qué le import
 | 7 | PrintScript | Caído o lento (crear depende de `POST /validate`); rechaza el token | New Relic, si alguien entra a mirar (`printscript-dev`) | Alerta de errores y p99 |
 | 8 | Permisos (con snippet-service#27) | Caído; el dueño no queda registrado | Todavía no está en el camino | Agente en Permisos; span en la traza de crear |
 | 9 | Asset service y Azurite (con snippet-service#22) | Caído; el contenido no se guarda | New Relic, si alguien entra a mirar (`asset-service-dev`) | Span en la traza de crear; alerta de errores |
-| 10 | La VM | Apagada, sin memoria, disco lleno | New Relic, si alguien entra a mirar (`vm-snippet-dev`) | Alertas de disco > 80 %, memoria > 90 % y host que no reporta |
+| 10 | La VM | Apagada, sin memoria, disco lleno (hasta el 27/11 crecía con cada deploy: ahora el deploy borra las imágenes que no se usan) | New Relic, si alguien entra a mirar (`vm-snippet-dev`) | Alertas de disco > 80 %, memoria > 90 % y host que no reporta |
 | 11 | Deploy | Publish falla (429 de Maven Central, 23/11); descarga de imagen colgada (10/11); el entorno queda con la versión vieja | Mirando GitHub Actions | Notificaciones de GitHub. No entra en el SLO |
 
 Redis no está en el camino de crear un snippet: lo usan el linteo y el formateo en segundo plano, y va en la tabla de ese flujo.
