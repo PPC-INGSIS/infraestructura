@@ -265,7 +265,7 @@ Decisiones y por qué:
 
 #### Synthetic: crear, leer y borrar
 
-Un monitor de New Relic que cada 2 horas **crea un snippet, lo lee y lo borra** contra dev. Prueba un flujo de negocio y no un ping: si falla, algo de ese camino está roto aunque todos los contenedores estén "arriba", que es justo lo que un healthcheck no ve.
+Un monitor de New Relic que cada 2 horas **crea un snippet, lo lee y lo borra** contra prod. Prueba un flujo de negocio y no un ping: si falla, algo de ese camino está roto aunque todos los contenedores estén "arriba", que es justo lo que un healthcheck no ve.
 
 El script está versionado en [`monitoreo/synthetic-flujo-snippet.js`](monitoreo/synthetic-flujo-snippet.js). Se edita en la web de New Relic (igual que las alertas, y por el mismo motivo: Terraform pedía una API key de usuario y un lugar donde guardar su estado), pero la versión que vale es la del repo.
 
@@ -285,11 +285,13 @@ El script está versionado en [`monitoreo/synthetic-flujo-snippet.js`](monitoreo
 | `SNIPPET_AUTH0_AUDIENCE` | La audiencia de la API |
 | `SNIPPET_CLIENT_ID` / `SNIPPET_CLIENT_SECRET` | La app M2M **propia del synthetic** |
 
-**Cómo recrearlo:** Synthetics → Create monitor → *Scripted API*, pegar el script, período **2 horas**, una sola ubicación (con varias, cada una crea y borra su snippet y se multiplican las corridas). Por ahora **no se agrega a la política `snippet-searcher-dev`**: la VM de dev se apaga a la noche y cada corrida de esas horas fallaría y avisaría por Discord sin que haya nada roto. La alerta del synthetic va con prod, que queda prendida.
+**Cómo recrearlo:** Synthetics → Create monitor → *Scripted API*, pegar el script, período **2 horas**, una sola ubicación (con varias, cada una crea y borra su snippet y se multiplican las corridas), con las credenciales de prod y en la política de alertas de prod.
+
+**Dev sirve para probarlo, no para dejarlo corriendo.** Antes de pasarlo a prod se crea el monitor con las credenciales de dev, se verifica que pase y se **pausa** (o se borra). No queda activo en dev por dos motivos: la VM de dev se apaga a la noche, así que cada corrida de esas horas fallaría sin que haya nada roto, y cada corrida gasta cupo (ver abajo) que necesita el de prod.
 
 Por qué así:
 
-- **Cada 2 horas y no cada minuto, por dos cupos gratuitos que se cuentan por mes.** New Relic da 500 corridas de synthetics con script, y Auth0 da 1000 tokens M2M **para todo el tenant**. Cada corrida pide un token nuevo, porque New Relic arranca cada corrida de cero y no hay dónde guardarlo entre una y otra. Cada minuto serían unas 43.200 corridas y 43.200 tokens por mes. El de Auth0 es el que importa: cuando se acaba, Snippets tampoco puede sacar su token para la Management API y deja de andar la búsqueda de usuarios al compartir. Cada 2 horas son 12 por día, unas 360 por mes. Cuando exista prod y haya un monitor por entorno, los dos pasan a **cada 3 horas**: dos monitores cada 2 horas serían 720 por mes, más que las 500 de New Relic; cada 3 horas son 480.
+- **Cada 2 horas y no cada minuto, por dos cupos gratuitos que se cuentan por mes.** New Relic da 500 corridas de synthetics con script, y Auth0 da 1000 tokens M2M **para todo el tenant**. Cada corrida pide un token nuevo, porque New Relic arranca cada corrida de cero y no hay dónde guardarlo entre una y otra. Cada minuto serían unas 43.200 corridas y 43.200 tokens por mes. El de Auth0 es el que importa: cuando se acaba, Snippets tampoco puede sacar su token para la Management API y deja de andar la búsqueda de usuarios al compartir. Cada 2 horas son 12 por día, unas 360 por mes, con un solo monitor activo. Si algún día se quisiera uno por entorno, los dos tendrían que pasar a **cada 3 horas**: dos monitores cada 2 horas serían 720 por mes, más que las 500 de New Relic; cada 3 horas son 480.
 - **App M2M propia y no la de Snippets.** El synthetic corre fuera de Snippets y es otro consumidor: si se le filtra el secret, se rota sin tocar los servicios. Necesita **los dos scopes** (`read:snippets` para leer y `write:snippets` para crear y borrar), a diferencia de la app M2M de Snippets, que con `read:snippets` le alcanza.
 - **El `sub` del token es el client id (`<client-id>@clients`) y no un usuario, y así está bien.** Era la pregunta abierta del issue. Desde permissions-service#28, Permisos autoriza con el `sub`: para registrar o borrar accesos hay que ser el dueño del snippet. El synthetic **es dueño de los snippets que crea**, así que los tres pasos pasan sin tocar nada: al crear se registra como dueño de un snippet que no tiene otro, al leer alcanza la columna de dueño de Snippets, y al borrar es el dueño. No hace falta un scope especial ni una excepción.
 - **Es distinto del caso de snippet-service#50.** Ahí Snippets actúa **en nombre de otro** (los trabajos en segundo plano sobre snippets de usuarios), y para eso sí hay que decidir algo: permissions-service#31.
