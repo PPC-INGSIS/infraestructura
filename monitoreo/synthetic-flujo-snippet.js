@@ -7,7 +7,7 @@
  * no ve.
  *
  * Va en un monitor de tipo "Scripted API". El script se edita en la web de New Relic, pero la
- * version que vale es esta: ver la seccion Synthetic del README.
+ * version que vale es esta: ver la seccion Synthetic de docs/observabilidad.md.
  *
  * Credenciales (New Relic → Synthetics → Secure credentials), ninguna en el repo:
  *   SNIPPET_API_URL          https://ppc-snippets-dev.duckdns.org/api
@@ -23,7 +23,7 @@ const API = $secure.SNIPPET_API_URL
 const TIMEOUT_MS = 10000
 
 // $http con promesas: el flujo son cuatro pedidos en orden y con callbacks queda una piramide.
-// Para el runtime viejo de New Relic hay que pasarlo a callbacks anidados (ver README).
+// Para el runtime viejo de New Relic hay que pasarlo a callbacks anidados (ver docs/observabilidad.md).
 //
 // El JSON se arma y se lee a mano en vez de usar la opcion `json`: en los runtimes nuevos $http
 // esta hecho sobre otra libreria, donde `json` y `body` no se pueden usar juntos. Mandar un

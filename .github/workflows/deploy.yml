@@ -168,7 +168,7 @@ jobs:
           # Cada deploy baja imágenes nuevas y las anteriores quedaban en el disco: el disco de la VM
           # subía en cada deploy y nunca bajaba. Se borran las que no usa ningún contenedor.
           # El rollback no las necesita: se hace revirtiendo versiones.env, y Swarm vuelve a bajar
-          # la imagen de ghcr.io (ver "Volver a una versión anterior" en el README).
+          # la imagen de ghcr.io (ver "Volver a una versión anterior" en docs/despliegue.md).
           # El df de antes y después deja en el log cuánto se liberó.
           docker system df
           docker image prune --all --force
