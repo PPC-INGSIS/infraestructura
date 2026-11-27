@@ -287,7 +287,9 @@ El script está versionado en [`monitoreo/synthetic-flujo-snippet.js`](monitoreo
 
 **Cómo recrearlo:** Synthetics → Create monitor → *Scripted API*, pegar el script, período **2 horas**, una sola ubicación (con varias, cada una crea y borra su snippet y se multiplican las corridas), con las credenciales de prod y en la política de alertas de prod.
 
-**Dev sirve para probarlo, no para dejarlo corriendo.** Antes de pasarlo a prod se crea el monitor con las credenciales de dev, se verifica que pase y se **pausa** (o se borra). No queda activo en dev por dos motivos: la VM de dev se apaga a la noche, así que cada corrida de esas horas fallaría sin que haya nada roto, y cada corrida gasta cupo (ver abajo) que necesita el de prod.
+**Cuando se apaga prod a propósito llegan dos avisos**, el de la VM y el del synthetic, y los dos se cierran al prenderla. Es la misma convención que la alerta de la VM: avisar siempre y que quien lo lee sepa si fue a propósito. No se automatizó la pausa del monitor desde el workflow VMs porque pedía una API key de usuario de New Relic como secret, el mismo motivo por el que se descartó Terraform. La política agrupa por condición, así que un apagado largo abre un solo aviso y no uno por corrida.
+
+**Dev sirve para probarlo, no para dejarlo corriendo.** Antes de pasarlo a prod se crea el monitor con las credenciales de dev, se verifica que pase y se **pausa** (o se borra). No queda activo en dev por dos motivos: la VM de dev se apaga a mano cuando no se usa y cada corrida de esas horas fallaría sin que haya nada roto, y cada corrida gasta cupo (ver abajo) que necesita el de prod.
 
 Por qué así:
 
