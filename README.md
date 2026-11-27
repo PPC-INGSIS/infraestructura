@@ -261,7 +261,73 @@ Decisiones y por qué:
 - **1 s y 99 % son el punto de partida.** Se revisan con una semana de datos de Snippets. Es una sola VM y los deploys reinician servicios: mejor una meta que se cumpla y subirla después que bajarla.
 - **El 400 por código inválido es éxito.** El SLI mide si el sistema funciona, no si el código del usuario es válido. Si no, un usuario que se equivoca mucho gastaría el error budget sin que nada esté roto.
 - **Se mide en prod.** La VM de dev se apaga a propósito para ahorrar créditos, y eso no es una falla.
-- **Las alertas llegan por mail y a un canal de Discord solo para alertas.** El mail queda registrado; en un canal aparte no se pierden entre la charla del equipo. Falta verificar que New Relic pueda mandar a un webhook de Discord.
+- **Las alertas llegan a un canal de Discord solo para alertas.** En un canal aparte no se pierden entre la charla del equipo. Ver [Alertas](#alertas).
+
+#### Alertas
+
+Las alertas se configuran en la web de New Relic (Alerts), no con código: Terraform pedía una API key de usuario como secret y un lugar donde guardar su estado, una herramienta más para mantener. Lo que importa queda acá: qué mide cada alerta, por qué y cómo recrearla si alguien la borra.
+
+Cómo se arma, de adentro hacia afuera:
+
+| Pieza | Qué es | La nuestra |
+|---|---|---|
+| Condición | Una consulta NRQL y cuándo abre una alerta | Las de la tabla de abajo |
+| Política | Agrupa condiciones | `snippet-searcher-dev`, con "One issue per condition": si caen la VM y un servicio, llegan dos avisos y no uno mezclado |
+| Workflow | A quién se le avisa: filtra por política y manda a un destino | `Discord - snippet-searcher-dev`: política `snippet-searcher-dev`, avisa al abrir y al cerrar |
+| Destino | Adónde llega | Webhook del canal `#vm-and-services-dev` del servidor de Discord "Alertas VM". La URL del webhook es secreta: quien la tenga puede escribir en el canal |
+
+La condición dice **qué** está mal y el workflow **a quién** avisar: para prod se crean las mismas condiciones en una política `snippet-searcher-prod` y su propio workflow, sin tocar las consultas.
+
+**Condiciones**
+
+| Condición | NRQL | Abre una alerta si | Qué hacer |
+|---|---|---|---|
+| VM dev sin reportar (apagada o sin red) | `SELECT count(*) FROM SystemSample WHERE displayName = 'vm-snippet-dev'` | No llegan datos durante 5 minutos | Si nadie la apagó a propósito, prenderla con el workflow [VMs](#encender-y-apagar-las-vms) y mirar en Azure si hubo un problema |
+| Servicio dev sin responder | `SELECT count(*) FROM Transaction WHERE appName IN ('snippets-dev', 'permissions-dev', 'printscript-dev') FACET appName` | Un servicio no manda transacciones durante 5 minutos | En la VM, `docker service ps snippet-searcher_<servicio>` y `docker service logs snippet-searcher_<servicio>` |
+
+En las dos: ventana de 1 minuto, *Event flow*, delay de 2 minutos, sin umbral estático y con un umbral de **pérdida de señal** de 5 minutos que abre una alerta crítica, sin cerrar las demás abiertas. La descripción de cada condición dice qué hacer y quién es el dueño, y tiene un Runbook URL a este README.
+
+Por qué así:
+
+- **Pérdida de señal y no un umbral.** Con la VM apagada no llega ningún dato, y un umbral como "menos de 1" compara datos que no existen: nunca dispara. La pérdida de señal mide la ausencia.
+- **Las transacciones de los healthchecks son la señal de vida.** Swarm le pega a `/actuator/health/readiness` cada 10 s, así que un servicio vivo manda unas 6 transacciones por minuto aunque nadie lo use. Por eso cada servicio tiene que tener `HEALTHCHECK`: PrintScript entró a esta alerta cuando lo sumó (printscript-service#45).
+- **5 minutos.** Menos, y un corte de red de un minuto ya avisa. Si Swarm reinicia un contenedor caído, vuelve en segundos y no hay alerta: se arregló solo, no hay nada que hacer.
+- **`FACET appName`**: una sola condición para los tres servicios, con una señal por servicio. La tarjeta dice cuál se cayó.
+
+**El mensaje de Discord**
+
+Discord rechaza un JSON que no tenga sus campos (`content` o `embeds`), así que el webhook lleva esta plantilla (workflow → canal Discord → *Edit notification message*). `{{ json … }}` mete cada valor ya escapado, y los `{{#if}}` evitan mandar `null`, que Discord rechaza:
+
+```json
+{
+  "username": "New Relic",
+  "embeds": [
+    {
+      "title": {{ json annotations.title.[0] }},
+      "url": {{ json issuePageUrl }},
+      {{#if accumulations.conditionDescription}}"description": {{ json accumulations.conditionDescription.[0] }},{{/if}}
+      "fields": [
+        { "name": "Estado", "value": {{ json state }}, "inline": true },
+        { "name": "Prioridad", "value": {{ json priority }}, "inline": true },
+        { "name": "Condición", "value": {{ json accumulations.conditionName.[0] }} }
+        {{#if annotations.wildcard}}, { "name": "Servicio", "value": {{ json annotations.wildcard.[0] }} }{{/if}}
+        {{#if accumulations.runbookUrl}}, { "name": "Runbook", "value": {{ json accumulations.runbookUrl.[0] }} }{{/if}}
+      ]
+    }
+  ]
+}
+```
+
+- La descripción sale de `accumulations.conditionDescription` y no de `annotations.description`: en las alertas de pérdida de señal, esa trae un texto automático de New Relic.
+- `annotations.wildcard` es el valor del `FACET`: el servicio que se cayó.
+- En la descripción, los comandos van entre backticks: Discord toma el `_` como itálica.
+
+**Cómo probarlas** (probadas en dev el 26 y 27/11)
+
+| Alerta | Cómo dispararla | Llega |
+|---|---|---|
+| VM sin reportar | Apagar la VM con el workflow VMs | Unos 6 minutos después; al prenderla, la de cierre |
+| Servicio sin responder | En la VM, `docker service scale snippet-searcher_printscript=0` | Unos 6 minutos después; con `=1`, la de cierre |
 
 ## Auth0
 
