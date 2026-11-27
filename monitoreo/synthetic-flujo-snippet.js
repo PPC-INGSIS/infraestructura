@@ -106,8 +106,8 @@ const flujo = async () => {
     id = await crear(bearer, contenido)
     await leer(bearer, id, contenido)
   } finally {
-    // En el finally para que un fallo al leer no deje el snippet acumulandose: el monitor corre
-    // cada minuto, asi que un snippet por corrida llenaria la base en un dia
+    // En el finally para que un fallo al leer no deje el snippet acumulandose: nadie ve los
+    // snippets del synthetic en su listado, asi que un huerfano por corrida no lo limpia nadie
     if (id) await borrar(bearer, id)
   }
 }
