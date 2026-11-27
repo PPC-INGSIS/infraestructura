@@ -105,6 +105,7 @@ Lo que no hace falta para levantar el entorno en local está en `docs/`, un arch
 
 | Archivo | Qué tiene |
 |---|---|
+| [Arquitectura](docs/arquitectura.md) | Qué corre en cada VM, cómo se hablan los servicios y cómo llega el código a las VMs (diagramas) |
 | [Despliegue](docs/despliegue.md) | Cómo llega el código a las VMs, las ramas, el workflow Deploy, los límites de memoria y el rollback |
 | [Observabilidad](docs/observabilidad.md) | New Relic: agentes, puntos de falla y SLO, synthetic, alertas y dashboard |
 | [Auth0](docs/auth0.md) | El tenant, la API, el rol automático y las credenciales de la Management API |
