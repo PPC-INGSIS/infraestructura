@@ -233,7 +233,7 @@ De acá salen el SLI, el synthetic y las alertas: primero se mira qué le import
 | # | Paso | Qué puede fallar | Cómo me entero | Propuesta |
 |---|---|---|---|---|
 | 1 | Navegador / UI | Error de JavaScript, la UI no carga | No me entero (lo ve el usuario) | Agente de navegador (infraestructura#49) |
-| 2 | DNS y certificado | DuckDNS apunta a otra IP; certbot no renueva | No me entero hasta que no carga | Synthetic (infraestructura#50) y alerta de vencimiento del certificado |
+| 2 | DNS y certificado | DuckDNS apunta a otra IP; certbot no renueva | No me entero hasta que no carga | [Synthetic](#synthetic-crear-leer-y-borrar) y alerta de vencimiento del certificado |
 | 3 | nginx | Config rota; no arranca si un upstream no existe (`host not found`, 10/11 y 22/11) | Deploy en rojo y SSH (`docker service ps`) | Synthetic; que nginx resuelva los nombres en cada pedido |
 | 4 | Auth0 | Token vencido u otro emisor (401 masivo); usuario sin rol (403); Auth0 caído | No me entero | 401/403 por minuto en Snippets, con alerta si se disparan |
 | 5 | Snippets | 500, lentitud, no arranca (sin base o sin Redis) | SSH (`docker service logs`) | Agente en Snippets (snippet-service#40): 5xx y p99. Acá se mide el SLI |
@@ -262,6 +262,39 @@ Decisiones y por qué:
 - **El 400 por código inválido es éxito.** El SLI mide si el sistema funciona, no si el código del usuario es válido. Si no, un usuario que se equivoca mucho gastaría el error budget sin que nada esté roto.
 - **Se mide en prod.** La VM de dev se apaga a propósito para ahorrar créditos, y eso no es una falla.
 - **Las alertas llegan a un canal de Discord solo para alertas.** En un canal aparte no se pierden entre la charla del equipo. Ver [Alertas](#alertas).
+
+#### Synthetic: crear, leer y borrar
+
+Un monitor de New Relic que cada minuto **crea un snippet, lo lee y lo borra** contra dev. Prueba un flujo de negocio y no un ping: si falla, algo de ese camino está roto aunque todos los contenedores estén "arriba", que es justo lo que un healthcheck no ve.
+
+El script está versionado en [`monitoreo/synthetic-flujo-snippet.js`](monitoreo/synthetic-flujo-snippet.js). Se edita en la web de New Relic (igual que las alertas, y por el mismo motivo: Terraform pedía una API key de usuario y un lugar donde guardar su estado), pero la versión que vale es la del repo.
+
+| Paso | Qué prueba de verdad |
+|---|---|
+| Token de Auth0 (Client Credentials) | Que Auth0 responde y que la app del monitor sigue autorizada en la API |
+| `POST /api/snippets` | nginx, el certificado, Snippets, PrintScript (valida el código), el asset service (guarda el contenido), Permisos (registra al dueño) y Postgres |
+| `GET /api/snippets/{id}` | Que el contenido vuelva **igual** al que se guardó. Es lo que falla si el asset service pierde el contenido o lo devuelve con otra codificación |
+| `DELETE /api/snippets/{id}` | Borrar la fila, el contenido y los accesos. Y es la limpieza: sin esto se acumularía un snippet por minuto |
+
+**Credenciales** (Synthetics → Secure credentials). Ninguna va en el repo:
+
+| Nombre | Qué es |
+|---|---|
+| `SNIPPET_API_URL` | `https://<dominio>/api` del entorno |
+| `SNIPPET_AUTH0_DOMAIN` | El dominio de Auth0, sin `https://` |
+| `SNIPPET_AUTH0_AUDIENCE` | La audiencia de la API |
+| `SNIPPET_CLIENT_ID` / `SNIPPET_CLIENT_SECRET` | La app M2M **propia del synthetic** |
+
+**Cómo recrearlo:** Synthetics → Create monitor → *Scripted API*, pegar el script, período **1 minuto**, una sola ubicación (con varias, cada una crea y borra su snippet y se multiplican las llamadas), y agregarlo a la política `snippet-searcher-dev` para que avise por el mismo canal de Discord que el resto.
+
+Por qué así:
+
+- **App M2M propia y no la de Snippets.** El synthetic corre fuera de Snippets y es otro consumidor: si se le filtra el secret, se rota sin tocar los servicios. Necesita **los dos scopes** (`read:snippets` para leer y `write:snippets` para crear y borrar), a diferencia de la app M2M de Snippets, que con `read:snippets` le alcanza.
+- **El `sub` del token es el client id (`<client-id>@clients`) y no un usuario, y así está bien.** Era la pregunta abierta del issue. Desde permissions-service#28, Permisos autoriza con el `sub`: para registrar o borrar accesos hay que ser el dueño del snippet. El synthetic **es dueño de los snippets que crea**, así que los tres pasos pasan sin tocar nada: al crear se registra como dueño de un snippet que no tiene otro, al leer alcanza la columna de dueño de Snippets, y al borrar es el dueño. No hace falta un scope especial ni una excepción.
+- **Es distinto del caso de snippet-service#50.** Ahí Snippets actúa **en nombre de otro** (los trabajos en segundo plano sobre snippets de usuarios), y para eso sí hay que decidir algo: permissions-service#31.
+- **El borrado va en un `finally`.** Si falla la lectura, el snippet igual se borra. Con un monitor por minuto, un snippet huérfano por corrida llena la base en un día.
+- **Los snippets del synthetic son de su propio dueño**, así que no aparecen en el listado de nadie: el `owner_id` es el client id y ningún usuario real lo tiene.
+- **El script usa `$http` con promesas** porque el flujo son cuatro pedidos en orden y con callbacks queda una pirámide. Eso pide el runtime de Node 16+ de New Relic; con el runtime viejo hay que pasarlo a callbacks anidados.
 
 #### Alertas
 
