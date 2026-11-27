@@ -265,7 +265,7 @@ Decisiones y por qué:
 
 #### Synthetic: crear, leer y borrar
 
-Un monitor de New Relic que cada minuto **crea un snippet, lo lee y lo borra** contra dev. Prueba un flujo de negocio y no un ping: si falla, algo de ese camino está roto aunque todos los contenedores estén "arriba", que es justo lo que un healthcheck no ve.
+Un monitor de New Relic que cada 2 horas **crea un snippet, lo lee y lo borra** contra prod. Prueba un flujo de negocio y no un ping: si falla, algo de ese camino está roto aunque todos los contenedores estén "arriba", que es justo lo que un healthcheck no ve.
 
 El script está versionado en [`monitoreo/synthetic-flujo-snippet.js`](monitoreo/synthetic-flujo-snippet.js). Se edita en la web de New Relic (igual que las alertas, y por el mismo motivo: Terraform pedía una API key de usuario y un lugar donde guardar su estado), pero la versión que vale es la del repo.
 
@@ -274,7 +274,7 @@ El script está versionado en [`monitoreo/synthetic-flujo-snippet.js`](monitoreo
 | Token de Auth0 (Client Credentials) | Que Auth0 responde y que la app del monitor sigue autorizada en la API |
 | `POST /api/snippets` | nginx, el certificado, Snippets, PrintScript (valida el código), el asset service (guarda el contenido), Permisos (registra al dueño) y Postgres |
 | `GET /api/snippets/{id}` | Que el contenido vuelva **igual** al que se guardó. Es lo que falla si el asset service pierde el contenido o lo devuelve con otra codificación |
-| `DELETE /api/snippets/{id}` | Borrar la fila, el contenido y los accesos. Y es la limpieza: sin esto se acumularía un snippet por minuto |
+| `DELETE /api/snippets/{id}` | Borrar la fila, el contenido y los accesos. Y es la limpieza: sin esto se acumularía un snippet por corrida |
 
 **Credenciales** (Synthetics → Secure credentials). Ninguna va en el repo:
 
@@ -285,14 +285,19 @@ El script está versionado en [`monitoreo/synthetic-flujo-snippet.js`](monitoreo
 | `SNIPPET_AUTH0_AUDIENCE` | La audiencia de la API |
 | `SNIPPET_CLIENT_ID` / `SNIPPET_CLIENT_SECRET` | La app M2M **propia del synthetic** |
 
-**Cómo recrearlo:** Synthetics → Create monitor → *Scripted API*, pegar el script, período **1 minuto**, una sola ubicación (con varias, cada una crea y borra su snippet y se multiplican las llamadas), y agregarlo a la política `snippet-searcher-dev` para que avise por el mismo canal de Discord que el resto.
+**Cómo recrearlo:** Synthetics → Create monitor → *Scripted API*, pegar el script, período **2 horas**, una sola ubicación (con varias, cada una crea y borra su snippet y se multiplican las corridas), con las credenciales de prod y en la política de alertas de prod.
+
+**Cuando se apaga prod a propósito llegan dos avisos**, el de la VM y el del synthetic, y los dos se cierran al prenderla. Es la misma convención que la alerta de la VM: avisar siempre y que quien lo lee sepa si fue a propósito. No se automatizó la pausa del monitor desde el workflow VMs porque pedía una API key de usuario de New Relic como secret, el mismo motivo por el que se descartó Terraform. La política agrupa por condición, así que un apagado largo abre un solo aviso y no uno por corrida.
+
+**Dev sirve para probarlo, no para dejarlo corriendo.** Antes de pasarlo a prod se crea el monitor con las credenciales de dev, se verifica que pase y se **pausa** (o se borra). No queda activo en dev por dos motivos: la VM de dev se apaga a mano cuando no se usa y cada corrida de esas horas fallaría sin que haya nada roto, y cada corrida gasta cupo (ver abajo) que necesita el de prod.
 
 Por qué así:
 
+- **Cada 2 horas y no cada minuto, por dos cupos gratuitos que se cuentan por mes.** New Relic da 500 corridas de synthetics con script, y Auth0 da 1000 tokens M2M **para todo el tenant**. Cada corrida pide un token nuevo, porque New Relic arranca cada corrida de cero y no hay dónde guardarlo entre una y otra. Cada minuto serían unas 43.200 corridas y 43.200 tokens por mes. El de Auth0 es el que importa: cuando se acaba, Snippets tampoco puede sacar su token para la Management API y deja de andar la búsqueda de usuarios al compartir. Cada 2 horas son 12 por día, unas 360 por mes, con un solo monitor activo. Si algún día se quisiera uno por entorno, los dos tendrían que pasar a **cada 3 horas**: dos monitores cada 2 horas serían 720 por mes, más que las 500 de New Relic; cada 3 horas son 480.
 - **App M2M propia y no la de Snippets.** El synthetic corre fuera de Snippets y es otro consumidor: si se le filtra el secret, se rota sin tocar los servicios. Necesita **los dos scopes** (`read:snippets` para leer y `write:snippets` para crear y borrar), a diferencia de la app M2M de Snippets, que con `read:snippets` le alcanza.
 - **El `sub` del token es el client id (`<client-id>@clients`) y no un usuario, y así está bien.** Era la pregunta abierta del issue. Desde permissions-service#28, Permisos autoriza con el `sub`: para registrar o borrar accesos hay que ser el dueño del snippet. El synthetic **es dueño de los snippets que crea**, así que los tres pasos pasan sin tocar nada: al crear se registra como dueño de un snippet que no tiene otro, al leer alcanza la columna de dueño de Snippets, y al borrar es el dueño. No hace falta un scope especial ni una excepción.
 - **Es distinto del caso de snippet-service#50.** Ahí Snippets actúa **en nombre de otro** (los trabajos en segundo plano sobre snippets de usuarios), y para eso sí hay que decidir algo: permissions-service#31.
-- **El borrado va en un `finally`.** Si falla la lectura, el snippet igual se borra. Con un monitor por minuto, un snippet huérfano por corrida llena la base en un día.
+- **El borrado va en un `finally`.** Si falla la lectura, el snippet igual se borra. Un snippet huérfano por corrida se acumula para siempre: nadie los ve en su listado y nada los limpia.
 - **Los snippets del synthetic son de su propio dueño**, así que no aparecen en el listado de nadie: el `owner_id` es el client id y ningún usuario real lo tiene.
 - **El script usa `$http` con promesas** porque el flujo son cuatro pedidos en orden y con callbacks queda una pirámide. Eso pide el runtime de Node 16+ de New Relic; con el runtime viejo hay que pasarlo a callbacks anidados.
 
