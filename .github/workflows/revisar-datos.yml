@@ -1,0 +1,136 @@
+name: Revisar datos
+
+# Chequeos de SOLO LECTURA contra las bases de un entorno, para correr a mano desde la
+# pestaña Actions.
+#
+# Existe porque a las bases solo se llega por el Docker de la VM, y a ese Docker solo se
+# llega con la clave SSH, que vive en los secretos del entorno y no en la máquina de nadie.
+# Sin esto, el único que puede responder "¿quedan datos en este estado?" es quien tenga la
+# clave puesta a mano.
+#
+# No escribe nada: las consultas son SELECT y el reporte queda en el resumen de la corrida.
+# Lo que haya que arreglar se decide después, y se arregla por la API, no a mano en la base.
+
+on:
+  workflow_dispatch:
+    inputs:
+      entorno:
+        description: "Qué entorno revisar"
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+
+permissions:
+  contents: read
+
+jobs:
+  snippets-sin-dueno:
+    name: Snippets sin dueño registrado en Permisos
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # De acá salen SSH_HOST, SSH_USER, SSH_KNOWN_HOSTS y SSH_PRIVATE_KEY
+    environment: ${{ inputs.entorno }}
+    steps:
+      - name: Configurar SSH
+        env:
+          SSH_HOST: ${{ vars.SSH_HOST }}
+          SSH_USER: ${{ vars.SSH_USER }}
+          SSH_KNOWN_HOSTS: ${{ vars.SSH_KNOWN_HOSTS }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ci
+          chmod 600 ~/.ssh/id_ci
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF
+          Host vm
+            HostName $SSH_HOST
+            User $SSH_USER
+            IdentityFile ~/.ssh/id_ci
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            BatchMode yes
+          EOF
+
+      - name: Verificar que la VM responde
+        run: |
+          if ! ssh -o ConnectTimeout=20 vm true; then
+            echo "::error::La VM no responde por SSH. ¿Está prendida? Prendela con el workflow VMs y volvé a correr este chequeo."
+            exit 1
+          fi
+
+      - name: Crear contexto de Docker hacia la VM
+        run: docker context create vm --docker "host=ssh://vm"
+
+      - name: Buscar los contenedores de las bases
+        run: |
+          # El nombre real en Swarm es <stack>_<servicio>.<n>.<id>, así que se filtra por el servicio
+          snippets=$(docker --context vm ps -q -f name=snippets-db | head -1)
+          permisos=$(docker --context vm ps -q -f name=permissions-db | head -1)
+          if [ -z "$snippets" ] || [ -z "$permisos" ]; then
+            echo "::error::No se encontraron los contenedores de las bases. ¿Está desplegado el stack?"
+            exit 1
+          fi
+          echo "SNIPPETS_DB=$snippets" >> "$GITHUB_ENV"
+          echo "PERMISOS_DB=$permisos" >> "$GITHUB_ENV"
+
+      # Las credenciales salen de las variables de entorno del propio contenedor: así el
+      # chequeo no las necesita ni cambia si alguien las rota
+      - name: Leer los snippets y sus dueños registrados
+        run: |
+          docker --context vm exec -i "$SNIPPETS_DB" \
+            sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -F" "' > snippets.txt <<'SQL'
+          SELECT id, owner_id FROM snippets ORDER BY id;
+          SQL
+
+          docker --context vm exec -i "$PERMISOS_DB" \
+            sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At' > duenos.txt <<'SQL'
+          SELECT snippet_id FROM snippet_permission WHERE role = 'OWNER' ORDER BY snippet_id;
+          SQL
+
+      - name: Comparar y reportar
+        run: |
+          cut -d' ' -f1 snippets.txt | sort > ids.txt
+          sort duenos.txt > duenos-ordenados.txt
+          # -23: solo las líneas que están en el primero y no en el segundo
+          comm -23 ids.txt duenos-ordenados.txt > huerfanos.txt
+
+          snippets=$(wc -l < ids.txt)
+          duenos=$(wc -l < duenos-ordenados.txt)
+          huerfanos=$(wc -l < huerfanos.txt)
+
+          {
+            echo "## Snippets sin dueño registrado — ${{ inputs.entorno }}"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Snippets en la base | $snippets |"
+            echo "| Con fila \`OWNER\` en Permisos | $duenos |"
+            echo "| **Sin dueño registrado** | **$huerfanos** |"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$huerfanos" -eq 0 ]; then
+            echo "No quedó ningún snippet sin dueño registrado."
+            echo "No quedó ninguno. Nada que hacer." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "::warning::Hay $huerfanos snippet(s) sin fila OWNER en Permisos"
+          {
+            echo "Su dueño real no puede compartirlos, y cualquiera puede reclamarlos"
+            echo "registrándose como dueño (permissions-service#32)."
+            echo
+            echo "| Snippet | \`owner_id\` en Snippets |"
+            echo "|---|---|"
+            while read -r id; do
+              owner=$(grep -m1 "^$id " snippets.txt | cut -d' ' -f2-)
+              # El sub de Auth0 trae un |, que partiría la celda de la tabla
+              echo "| \`$id\` | \`${owner//|/\\|}\` |"
+            done < huerfanos.txt
+            echo
+            echo "Se arreglan por la API, no a mano en la base: \`DELETE /api/snippets/{id}\` con un"
+            echo "token del dueño borra la fila, el contenido y los accesos de una."
+          } >> "$GITHUB_STEP_SUMMARY"
