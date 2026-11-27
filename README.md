@@ -368,6 +368,36 @@ Discord rechaza un JSON que no tenga sus campos (`content` o `embeds`), así que
 | VM sin reportar | Apagar la VM con el workflow VMs | Unos 6 minutos después; al prenderla, la de cierre |
 | Servicio sin responder | En la VM, `docker service scale snippet-searcher_printscript=0` | Unos 6 minutos después; con `=1`, la de cierre |
 
+#### Dashboard
+
+En New Relic: **Dashboards → `Snippet Searcher - dev`**. Igual que las alertas, se arma en la web; las consultas que valen son las de acá.
+
+| Gráfico | Qué responde | Consulta |
+|---|---|---|
+| Latencia p99 por servicio (s) | ¿Cuánto tarda el 1 % más lento de los pedidos? | `SELECT percentile(duration, 99) FROM Transaction WHERE appName IN (…) AND name != 'WebTransaction/SpringController/OperationHandler/handle' FACET appName TIMESERIES` |
+| Tráfico por servicio (pedidos/min) | ¿Cuánto se usa cada servicio? | `SELECT rate(count(*), 1 minute) FROM Transaction WHERE … FACET appName TIMESERIES` |
+| Errores del servidor (% de 5xx) | ¿Qué parte de los pedidos falla por culpa nuestra? | `SELECT percentage(count(*), WHERE http.statusCode >= 500) FROM Transaction WHERE … FACET appName TIMESERIES` |
+| VM dev: CPU, memoria y disco (%) | ¿Cuánto margen le queda a la VM? | `SELECT average(cpuPercent), average(memoryUsedPercent), max(diskUsedPercent) FROM SystemSample WHERE displayName = 'vm-snippet-dev' TIMESERIES` |
+| VM dev: ¿reporta? | ¿Está viva la VM? | `SELECT count(*) FROM SystemSample WHERE displayName = 'vm-snippet-dev' SINCE 2 minutes ago` |
+
+`appName IN (…)` es `('snippets-dev', 'permissions-dev', 'printscript-dev')`. Los tres primeros gráficos llevan el mismo `WHERE`.
+
+Por qué así:
+
+- **Los healthchecks se sacan por el nombre de la transacción y no por la URL.** El agente nombra la transacción por el controlador que la atiende, no por la ruta: `/actuator/health/readiness` aparece como `OperationHandler/handle`, así que un `name NOT LIKE '%actuator%'` no saca nada. Y hay que sacarlos: Swarm le pega a cada servicio cada 10 s, unas 6 transacciones por minuto, que en dev son el 80 % del total. Con ellos adentro, el tráfico marca 6 pedidos por minuto con la app vacía y un 5xx real se ve cinco veces más chico.
+- **Errores son solo los 5xx.** Un 401 (token vencido) o un 400 (pedido mal armado) es el servicio rechazando bien algo del cliente. Es el mismo criterio que el SLO: contar solo lo que depende de nosotros.
+- **Huecos en el gráfico de errores no son 0 %.** Son minutos sin pedidos: el porcentaje de cero pedidos no existe, y New Relic no lo dibuja.
+- **El p99 casi no cambia al sacar los healthchecks**: en un percentil alto mandan los pedidos lentos. Donde sí cambia todo es en tráfico y errores, donde cada pedido cuenta igual.
+- **El estado de la VM cuenta muestras recientes en vez de mirar la última.** `latest(timestamp)` llegó a mostrar "hace 14 minutos" con la VM reportando cada 5 s; un conteo que da 0 cuando no llega nada no se puede leer mal. Este gráfico ignora el selector de tiempo del dashboard: con "última semana" contaría miles aunque la VM esté apagada.
+- **Las horas se ven en el huso de cada usuario de New Relic** (*User preferences → Time zone*). Por defecto es UTC, tres horas adelante.
+
+Lo que se vio al armarlo (27/11), para seguir:
+
+- **El primer pedido después de un rato sin uso tarda unos 3,5 s** (`GET /snippets`), con o sin deploy antes. Falta ver en la traza de esa transacción dónde se va el tiempo.
+- **El disco sube en cada deploy y no baja**: el workflow de deploy no borra las imágenes viejas. Falta una limpieza y una alerta de disco.
+
+Falta del issue #51: el synthetic (cuando exista el monitor de prod), el largo del stream de Redis y el lag del consumidor (ningún agente instalado lo manda), y el mismo dashboard para prod.
+
 ## Auth0
 
 Todo el equipo usa un solo tenant de Auth0 (`dev-m32ysp7h6y2qyjn0`, región US) para local, dev y prod. Los integrantes del equipo son miembros del tenant: entran al dashboard con su propia cuenta.
